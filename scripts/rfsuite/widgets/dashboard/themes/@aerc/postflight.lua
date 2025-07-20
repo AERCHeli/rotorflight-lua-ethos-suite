@@ -96,28 +96,25 @@ local themeOptions = {
     ls_full = {
         font = "FONT_XXL", 
         titlefont = "FONT_S", 
-        valuepaddingbottom = 20, 
         titlepaddingtop = 15
     },
 
     ls_std  = {
         font = "FONT_XL", 
         titlefont = "FONT_XS", 
-        valuepaddingbottom = 25, 
-        titlepaddingtop = 0},
+        titlepaddingtop = 0
+    },
 
     -- Medium screens (X18 / X18S / TWXLITE) - Full/Standard
     ms_full = {
         font = "FONT_XL", 
-        titlefont = "FONT_XS", 
-        valuepaddingbottom = 15, 
+        titlefont = "FONT_XXS", 
         titlepaddingtop = 5
     },
 
     ms_std  = {
         font = "FONT_XL", 
         titlefont = "FONT_XXS", 
-        valuepaddingbottom = 0, 
         titlepaddingtop = 0
     },
 
@@ -125,14 +122,12 @@ local themeOptions = {
     ss_full = {
         font = "FONT_XL", 
         titlefont = "FONT_XS", 
-        valuepaddingbottom = 15, 
         titlepaddingtop = 5
     },
 
     ss_std  = {
         font = "FONT_XL", 
         titlefont = "FONT_XXS", 
-        valuepaddingbottom = 0, 
         titlepaddingtop = 0
     },
 }
@@ -149,7 +144,6 @@ end
 -- Caching for boxes
 local lastScreenW = nil
 local boxes_cache = nil
-local themeconfig = nil
 local headeropts = utils.getHeaderOptions()
 
 -- Theme Layout
@@ -207,7 +201,7 @@ local function buildBoxes(W)
         {col = 3, row = 5, rowspan = 2, type = "text", subtype = "telemetry", source = "voltage", title = i18n("widgets.dashboard.volts_per_cell"), titlepos = "top", titlepaddingtop = opts.titlepaddingtop, 
         font = opts.font, titlefont = opts.titlefont, bgcolor = colorMode.bgcolor, titlecolor = colorMode.titlecolor, textcolor = "orange", unit = "V", transform = function(v) return maxVoltageToCellVoltage(v) end},
 
-        {col = 3, row = 7, rowspan = 2, type = "text", subtype = "stats", stattype = "min", source = "rssi", title = i18n("widgets.dashboard.link_min"), titlepos = "top", titlepaddingtop = opts.titlepaddingtop,
+        {col = 3, row = 7, rowspan = 2, type = "text", subtype = "stats", stattype = "min", source = "link", title = i18n("widgets.dashboard.link_min"), titlepos = "top", titlepaddingtop = opts.titlepaddingtop,
         font = opts.font, titlefont = opts.titlefont, bgcolor = colorMode.bgcolor, titlecolor = colorMode.titlecolor, textcolor = "orange", transform = "floor"},
     }
 end

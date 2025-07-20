@@ -32,7 +32,8 @@ local darkMode = {
     rssifillbgcolor = "darkgrey",
     txaccentcolor   = "grey",
     txfillcolor     = "green",
-    txbgfillcolor   = "darkgrey"
+    txbgfillcolor   = "darkgrey",
+    bgcolortop =    lcd.RGB(10, 10, 10),
 }
 
 local lightMode = {
@@ -46,7 +47,8 @@ local lightMode = {
     rssifillbgcolor = "grey",
     txaccentcolor   = "darkgrey",
     txfillcolor     = "green",
-    txbgfillcolor   = "grey"
+    txbgfillcolor   = "grey",
+    bgcolortop =    "grey",
 }
 
 -- User voltage min/max override support
@@ -104,51 +106,45 @@ local themeOptions = {
         valuepaddingtop = 20, 
         valuepaddingbottom = 25, 
         gaugepaddingtop = 20, 
-        battadvpaddingtop = 20, 
-        brvaluepaddingtop = 25
+        gaugepadding = 20
     },
 
     ls_std  = { 
         font = "FONT_XL", 
         advfont = "FONT_M", 
-        thickness = 15, 
+        thickness = 25, 
         batteryframethickness = 4, 
         titlepaddingbottom = 0, 
         valuepaddingleft = 75, 
         valuepaddingtop = 5, 
         valuepaddingbottom = 25, 
         gaugepaddingtop = 5, 
-        battadvpaddingtop = 5, 
-        brvaluepaddingtop = 10
+        gaugepadding = 10,
     },
 
     -- Medium screens (X18 / X18S / TWXLITE) - Full/Standard
     ms_full = { 
-        font = "FONT_XXL", 
+        font = "FONT_XL", 
         advfont = "FONT_M", 
         thickness = 17, 
         batteryframethickness = 4, 
         titlepaddingbottom = 0, 
         valuepaddingleft = 20, 
-        valuepaddingtop = 5, 
+        valuepaddingtop = 25, 
         valuepaddingbottom = 15, 
         gaugepaddingtop = 5, 
-        battadvpaddingtop = 5, 
-        brvaluepaddingtop = 20
     },
 
     ms_std  = { 
         font = "FONT_XL", 
         advfont = "FONT_S", 
-        thickness = 10, 
+        thickness = 17, 
         batteryframethickness = 2, 
         titlepaddingbottom = 0, 
         valuepaddingleft = 20, 
         valuepaddingtop = 10, 
         valuepaddingbottom = 25, 
         gaugepaddingtop = 5, 
-        battadvpaddingtop = 0, 
-        brvaluepaddingtop = 10
     },
 
     -- Small screens - (X14 / X14S) Full/Standard
@@ -162,8 +158,6 @@ local themeOptions = {
         valuepaddingtop = 5, 
         valuepaddingbottom = 15, 
         gaugepaddingtop = 5, 
-        battadvpaddingtop = 5, 
-        brvaluepaddingtop = 10
     },
 
     ss_std  = { 
@@ -176,8 +170,6 @@ local themeOptions = {
         valuepaddingtop = 10, 
         valuepaddingbottom = 25, 
         gaugepaddingtop = 5, 
-        battadvpaddingtop = 0, 
-        brvaluepaddingtop = 10
     },
 }
 
@@ -200,7 +192,7 @@ local headeropts = utils.getHeaderOptions()
 local layout = {
     cols    = 20,
     rows    = 8,
-    padding = 1,
+    padding = 2,
     --showgrid = lcd.RGB(100, 100, 100)  -- or any color you prefer
 }
 
@@ -317,7 +309,7 @@ local function buildBoxes(W)
         rowspan = 2,
         type    = "text",
         subtype = "telemetry",
-        source  = "rssi",
+        source  = "link",
         unit    = "dB",
         title   = i18n("widgets.dashboard.lq"):upper(),
         titlepos= "bottom",
@@ -465,7 +457,7 @@ local header_boxes = {
         font = headeropts.font, 
         valuealign = "left", 
         valuepaddingleft = 5,
-        bgcolor = colorMode.bgcolor, 
+        bgcolor = colorMode.bgcolortop, 
         titlecolor = colorMode.titlecolor, 
         textcolor = colorMode.textcolor 
     },
@@ -477,7 +469,7 @@ local header_boxes = {
         colspan = 3, 
         type = "image", 
         subtype = "image",
-        bgcolor = colorMode.bgcolor 
+        bgcolor = colorMode.bgcolortop
     },
 
     -- TX Battery
@@ -504,7 +496,7 @@ local header_boxes = {
         gaugepaddingbottom = headeropts.gaugepaddingbottom,
         gaugepaddingtop = headeropts.gaugepaddingtop,
         fillbgcolor = colorMode.txbgfillcolor, 
-        bgcolor = colorMode.bgcolor,
+        bgcolor = colorMode.bgcolortop,
         accentcolor = colorMode.txaccentcolor, 
         textcolor = colorMode.textcolor,
         min = getThemeValue("tx_min"), 
@@ -533,7 +525,7 @@ local header_boxes = {
         barpaddingtop = headeropts.barpaddingtop,
         valuepaddingleft = headeropts.valuepaddingleft,
         valuepaddingbottom = headeropts.valuepaddingbottom,
-        bgcolor = colorMode.bgcolor, 
+        bgcolor = colorMode.bgcolortop, 
         textcolor = colorMode.textcolor, 
         fillcolor = colorMode.rssifillcolor,
         fillbgcolor = colorMode.rssifillbgcolor,

@@ -18,7 +18,6 @@
 local i18n = rfsuite.i18n.get
 local utils = rfsuite.widgets.dashboard.utils
 local boxes_cache = nil
-local themeconfig = nil
 local lastScreenW = nil
 
 local function maxVoltageToCellVoltage(value)
@@ -44,7 +43,8 @@ local darkMode = {
     rssifillbgcolor = "darkgrey",
     txaccentcolor   = "grey",
     txfillcolor     = "green",
-    txbgfillcolor   = "darkgrey"
+    txbgfillcolor   = "darkgrey",
+    bgcolortop =    lcd.RGB(10, 10, 10),
 }
 
 local lightMode = {
@@ -58,7 +58,8 @@ local lightMode = {
     rssifillbgcolor = "grey",
     txaccentcolor   = "darkgrey",
     txfillcolor     = "green",
-    txbgfillcolor   = "grey"
+    txbgfillcolor   = "grey",
+    bgcolortop      = "grey"
 }
 
 -- User voltage min/max override support
@@ -103,93 +104,46 @@ local function getThemeOptionKey(W)
     end
 end
 
--- Theme Options based on screen width
+-- Theme Options based on screen size
 local themeOptions = {
+
     -- Large screens - (X20 / X20RS / X18RS etc) Full/Standard
-    ls_full = { 
+    ls_full = {
         font = "FONT_XXL", 
-        advfont = "FONT_M", 
-        thickness = 25, 
-        batteryframethickness = 4, 
-        titlepaddingbottom = 15, 
-        valuepaddingleft = 25, 
-        valuepaddingtop = 20, 
-        valuepaddingbottom = 25, 
-        gaugepaddingtop = 20, 
-        battadvpaddingtop = 20, 
-        brvaluepaddingtop = 25
+        titlefont = "FONT_S", 
+        titlepaddingtop = 15
     },
 
-    ls_std  = { 
+    ls_std  = {
         font = "FONT_XL", 
-        advfont = "FONT_M", 
-        thickness = 15, 
-        batteryframethickness = 4, 
-        titlepaddingbottom = 0, 
-        valuepaddingleft = 75, 
-        valuepaddingtop = 5, 
-        valuepaddingbottom = 25, 
-        gaugepaddingtop = 5, 
-        battadvpaddingtop = 5, 
-        brvaluepaddingtop = 10
+        titlefont = "FONT_XS", 
+        titlepaddingtop = 0
     },
 
     -- Medium screens (X18 / X18S / TWXLITE) - Full/Standard
-    ms_full = { 
-        font = "FONT_XXL", 
-        advfont = "FONT_M", 
-        thickness = 17, 
-        batteryframethickness = 4, 
-        titlepaddingbottom = 0, 
-        valuepaddingleft = 20, 
-        valuepaddingtop = 5, 
-        valuepaddingbottom = 15, 
-        gaugepaddingtop = 5, 
-        battadvpaddingtop = 5, 
-        brvaluepaddingtop = 20
+    ms_full = {
+        font = "FONT_XL", 
+        titlefont = "FONT_XXS", 
+        titlepaddingtop = 5
     },
 
-    ms_std  = { 
+    ms_std  = {
         font = "FONT_XL", 
-        advfont = "FONT_S", 
-        thickness = 10, 
-        batteryframethickness = 2, 
-        titlepaddingbottom = 0, 
-        valuepaddingleft = 20, 
-        valuepaddingtop = 10, 
-        valuepaddingbottom = 25, 
-        gaugepaddingtop = 5, 
-        battadvpaddingtop = 0, 
-        brvaluepaddingtop = 10
+        titlefont = "FONT_XXS", 
+        titlepaddingtop = 0
     },
 
     -- Small screens - (X14 / X14S) Full/Standard
-    ss_full = { 
+    ss_full = {
         font = "FONT_XL", 
-        advfont = "FONT_M", 
-        thickness = 20,  
-        batteryframethickness = 4, 
-        titlepaddingbottom = 0, 
-        valuepaddingleft = 20, 
-        valuepaddingtop = 5, 
-        valuepaddingbottom = 15, 
-        gaugepaddingtop = 5, 
-        battadvpaddingtop = 5, 
-        brvaluepaddingtop = 10
+        titlefont = "FONT_XS", 
+        titlepaddingtop = 5
     },
 
-    ss_std  = { 
+    ss_std  = {
         font = "FONT_XL", 
-        advfont = "FONT_S", 
-        thickness = 12,  
-        batteryframethickness = 2, 
-        titlepaddingbottom = 0, 
-        valuepaddingleft = 20, 
-        valuepaddingtop = 10, 
-        valuepaddingbottom = 25, 
-        gaugepaddingtop = 5, 
-        battadvpaddingtop = 0, 
-        brvaluepaddingtop = 10
+        titlefont = "FONT_XXS", 
+        titlepaddingtop = 0
     },
 }
 
@@ -205,14 +159,13 @@ end
 -- Caching for boxes
 local lastScreenW = nil
 local boxes_cache = nil
-local themeconfig = nil
 local headeropts = utils.getHeaderOptions()
 
 -- Theme Layout
 local layout = {
     cols    = 3,
     rows    = 3,
-    padding = 1,
+    padding = 2,
     --showgrid = lcd.RGB(100, 100, 100)  -- or any color you prefer
 }
 
@@ -236,8 +189,8 @@ local function buildBoxes(W)
     {col = 1, row = 2, type = "time", subtype = "total", title = i18n("widgets.dashboard.total_flight_duration"), titlepos = "bottom", bgcolor = colorMode.bgcolor, textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
     {col = 1, row = 3, type = "text", subtype = "stats", stattype = "min", source = "rpm", title = i18n("widgets.dashboard.rpm_min"), unit = " rpm", titlepos = "bottom", bgcolor = colorMode.bgcolor, transform = "floor", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
 
-    {col = 2, row = 1, type = "text", subtype = "stats", stattype = "min", source = "rssi", title = i18n("widgets.dashboard.link_min"), titlepos = "bottom", bgcolor = colorMode.bgcolor, transform = "floor", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
-    {col = 2, row = 2, type = "text", subtype = "stats", stattype = "max", source = "rssi", title = i18n("widgets.dashboard.link_max"), titlepos = "bottom", bgcolor = colorMode.bgcolor, transform = "floor", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
+    {col = 2, row = 1, type = "text", subtype = "stats", stattype = "min", source = "link", title = i18n("widgets.dashboard.link_min"), titlepos = "bottom", bgcolor = colorMode.bgcolor, transform = "floor", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
+    {col = 2, row = 2, type = "text", subtype = "stats", stattype = "max", source = "link", title = i18n("widgets.dashboard.link_max"), titlepos = "bottom", bgcolor = colorMode.bgcolor, transform = "floor", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
     {col = 2, row = 3, type = "text", subtype = "stats", source = "rpm", title = "RPM Max", unit = " rpm", titlepos = "bottom", bgcolor = colorMode.bgcolor, transform = "floor", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
  
     {col = 3, row = 1, type = "text", subtype = "telemetry", source = "bec_voltage", title = i18n("widgets.dashboard.voltage"), titlepos = "bottom", bgcolor = colorMode.bgcolor, unit = "V", textcolor = colorMode.textcolor, titlecolor = colorMode.titlecolor},
@@ -258,7 +211,7 @@ local header_boxes = {
         font = headeropts.font, 
         valuealign = "left", 
         valuepaddingleft = 5,
-        bgcolor = colorMode.bgcolor, 
+        bgcolor = colorMode.bgcolortop, 
         titlecolor = colorMode.titlecolor, 
         textcolor = colorMode.textcolor 
     },
@@ -270,7 +223,7 @@ local header_boxes = {
         colspan = 3, 
         type = "image", 
         subtype = "image",
-        bgcolor = colorMode.bgcolor 
+        bgcolor = colorMode.bgcolortop 
     },
 
     -- TX Battery
@@ -297,7 +250,7 @@ local header_boxes = {
         gaugepaddingbottom = headeropts.gaugepaddingbottom,
         gaugepaddingtop = headeropts.gaugepaddingtop,
         fillbgcolor = colorMode.txbgfillcolor, 
-        bgcolor = colorMode.bgcolor,
+        bgcolor = colorMode.bgcolortop,
         accentcolor = colorMode.txaccentcolor, 
         textcolor = colorMode.textcolor,
         min = getThemeValue("tx_min"), 
@@ -326,7 +279,7 @@ local header_boxes = {
         barpaddingtop = headeropts.barpaddingtop,
         valuepaddingleft = headeropts.valuepaddingleft,
         valuepaddingbottom = headeropts.valuepaddingbottom,
-        bgcolor = colorMode.bgcolor, 
+        bgcolor = colorMode.bgcolortop, 
         textcolor = colorMode.textcolor, 
         fillcolor = colorMode.rssifillcolor,
         fillbgcolor = colorMode.rssifillbgcolor,
@@ -334,11 +287,9 @@ local header_boxes = {
 }
 
 local function boxes()
-    local config = rfsuite and rfsuite.session and rfsuite.session.modelPreferences and rfsuite.session.modelPreferences[theme_section]
     local W = lcd.getWindowSize()
-    if boxes_cache == nil or themeconfig ~= config or lastScreenW ~= W then
+    if boxes_cache == nil or lastScreenW ~= W then
         boxes_cache = buildBoxes(W)
-        themeconfig = config
         lastScreenW = W
     end
     return boxes_cache
