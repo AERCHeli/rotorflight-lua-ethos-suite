@@ -39,30 +39,28 @@ local lastFuelTimestamp = nil
 local maxFuelDropPerSecond = 1      -- percent per second 
 
 
--- Kalman filter state
-
--- kalmanQ: Increase if your system is very dynamic (e.g. lots of load jumps).
--- kalmanR: Increase if sensor noise is high (to reduce twitchiness).
-
--- Adjust these parameters based on your system's behavior:
--- 
--- Behavior	                    What to Adjust	                        How
--- Reacts too slowly	        Decrease kalmanR or increase kalmanQ	Trusts sensor more or expects more movement
--- Reacts too fast/noisy	    Increase kalmanR or decrease kalmanQ	Trusts sensor less, smooths changes
--- Doesn’t track slow changes	Increase kalmanQ	                    Allows long-term drift
-
--- The settings of  kalmanQ = 0.005 and kalmanR = 0.25 are initial values.
-
--- TL;DR
--- Update Rate	    Suggested Q	    Suggested R	    Notes
--- 0.5 sec	        0.02	        0.15	        Baseline tuning
--- 0.25 sec	        0.015–0.025	    0.15–0.2	    Smoother, still responsive
-
+--
+local minQ, maxQ   = 0.002, 0.02
+local minR, maxR   = 0.5,   0.1
+local defaultFactor= 0.5    -- mid‑point
+local lastFactor   = nil
 
 local kalmanVoltage = nil
-local kalmanP = 1.0
-local kalmanQ = 0.002   -- Very slow to drift
-local kalmanR = 0.3     -- Strong distrust in sudden sensor drops
+local kalmanP       = 1.0
+local kalmanQ       = minQ
+local kalmanR       = maxR
+
+
+local function updateKalmanParams(f)
+    -- clamp 0–1
+    f = math.max(0, math.min(1, f))
+
+    -- Q: high→low as f goes 0→1  (more smoothing at high f)
+    kalmanQ = maxQ - (maxQ - minQ) * f
+
+    -- R: low→high as f goes 0→1  (more trusting of measurement noise at high f)
+    kalmanR = minR + (maxR - minR) * f
+end
 
 local function kalmanFilterVoltage(measured)
     if not kalmanVoltage then
@@ -91,12 +89,16 @@ for i = 0, 120 do
     dischargeCurveTable[i + 1] = math.floor(math.min(100, math.max(0, percent)) + 0.5)
 end
 
+local function resetKalmanFilter()
+    kalmanVoltage = nil
+    kalmanP = 1.0
+end
+
 local function resetVoltageTracking()
     lastVoltages = {}
     voltageStableTime = nil
     voltageStabilised = false
-    kalmanVoltage = nil
-    kalmanP = 1.0
+    resetKalmanFilter()
 end
 
 local function isVoltageStable()
@@ -178,6 +180,14 @@ local function smartFuelCalc()
         end
     end
 
+    -- if it changed, recompute Q/R and wipe the old state
+    local f = rfsuite.session.modelPreferences and rfsuite.session.modelPreferences.battery and rfsuite.session.modelPreferences.battery.kalman_multiplier or defaultFactor
+    if f ~= lastFactor then
+        lastFactor = f
+        updateKalmanParams(f)
+        resetVoltageTracking()
+    end
+
     local bc = rfsuite.session.batteryConfig
     local configSig = table.concat({
         bc.batteryCellCount,
@@ -237,9 +247,19 @@ local function smartFuelCalc()
         end
     end
 
-    local filteredVoltage = kalmanFilterVoltage(voltage)
+    -- Only apply Kalman while actually flying; otherwise reset it and use raw voltage
+    local filteredVoltage
+    if rfsuite.flightmode.current == "inflight" then
+        filteredVoltage = kalmanFilterVoltage(voltage)
+    else
+        -- mode isn’t inflight: wipe out any past filter state
+        resetKalmanFilter()
+        filteredVoltage = voltage
+    end
+
     local compensatedVoltage = applySagCompensation(filteredVoltage)
     local percent = fuelPercentageCalcByVoltage(compensatedVoltage, bc.batteryCellCount)
+
 
     local now = os.clock()
     if lastFuelPercent and lastFuelTimestamp then
