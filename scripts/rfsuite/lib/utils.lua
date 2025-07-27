@@ -799,43 +799,61 @@ function utils.truncateText(str, maxWidth)
 end
 
 function utils.reportMemoryUsage(location)
-
-    if rfsuite.preferences.developer.memstats == false then
+    if not rfsuite.preferences.developer.memstats then
         return
     end
 
-    -- Get current memory usage in bytes and convert to KB
-    local currentMemoryUsage = system.getMemoryUsage().luaRamAvailable / 1024
+    local TOTAL_LUA_MEMORY_KB = 2048 -- Total Lua memory in KB (2 MB)
 
-    -- Retrieve the last memory usage from the session (convert it to KB if it exists)
-    local lastMemoryUsage = rfsuite.session.lastMemoryUsage
+    -- Get current memory
+    local memInfo = system.getMemoryUsage()
+    local currentAvailableKB = math.max(0, memInfo.luaRamAvailable / 1024)
+    local currentUsedKB = TOTAL_LUA_MEMORY_KB - currentAvailableKB
 
-    -- Ensure location is not nil or empty
-    location = location or "Unknown"
-
-    -- Construct the log message
-    local logMessage
-
-    if lastMemoryUsage then
-        lastMemoryUsage = lastMemoryUsage / 1024  -- Convert last recorded memory to KB
-        local difference = currentMemoryUsage - lastMemoryUsage
-        if difference > 0 then
-            logMessage = string.format("[%s] Memory usage decreased by %.2f KB (Available: %.2f KB)", location, difference, currentMemoryUsage)
-        elseif difference < 0 then
-            logMessage = string.format("[%s] Memory usage increased by %.2f KB (Available: %.2f KB)", location, -difference, currentMemoryUsage)
-        else
-            logMessage = string.format("[%s] Memory usage unchanged (Available: %.2f KB)", location, currentMemoryUsage)
-        end
-    else
-        logMessage = string.format("[%s] Initial memory usage: %.2f KB", location, currentMemoryUsage)
+    -- Clamp usage to max
+    if currentUsedKB > TOTAL_LUA_MEMORY_KB then
+        currentUsedKB = TOTAL_LUA_MEMORY_KB
     end
 
-    -- Log the message
+    -- Retrieve last used value
+    local lastUsedKB
+    if rfsuite.session.lastMemoryUsage then
+        local lastAvailableKB = rfsuite.session.lastMemoryUsage / 1024
+        lastUsedKB = TOTAL_LUA_MEMORY_KB - lastAvailableKB
+    end
+
+    location = location or "Unknown"
+    local logMessage = ""
+    local WARN_THRESHOLD_KB = 950
+
+    -- Delta message
+    if lastUsedKB then
+        local diff = currentUsedKB - lastUsedKB
+        if math.abs(diff) < 0.01 then
+            logMessage = string.format("[%s] Memory usage unchanged (Still using: %.2f KB / %d KB)", location, currentUsedKB, TOTAL_LUA_MEMORY_KB)
+        elseif diff > 0 then
+            logMessage = string.format("[%s] Memory usage increased by %.2f KB (Now using: %.2f KB / %d KB)", location, diff, currentUsedKB, TOTAL_LUA_MEMORY_KB)
+        else
+            logMessage = string.format("[%s] Memory usage decreased by %.2f KB (Now using: %.2f KB / %d KB)", location, -diff, currentUsedKB, TOTAL_LUA_MEMORY_KB)
+        end
+    else
+        logMessage = string.format("[%s] Initial memory usage: %.2f KB / %d KB", location, currentUsedKB, TOTAL_LUA_MEMORY_KB)
+    end
+
+    -- Add warning if memory is full or close to full
+    if currentUsedKB >= TOTAL_LUA_MEMORY_KB then
+        logMessage = logMessage .. " - Lua memory FULL!"
+    elseif currentUsedKB >= WARN_THRESHOLD_KB then
+        logMessage = logMessage .. " - High memory usage"
+    end
+
     rfsuite.utils.log(logMessage, "info")
 
-    -- Store the current memory usage in bytes for future calls (convert back to bytes)
-    rfsuite.session.lastMemoryUsage = system.getMemoryUsage().luaRamAvailable
+    -- Save current for next diff
+    rfsuite.session.lastMemoryUsage = memInfo.luaRamAvailable
 end
+
+
 
 
 function utils.onReboot()
