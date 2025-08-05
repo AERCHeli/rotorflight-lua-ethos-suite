@@ -73,11 +73,7 @@ function render.wakeup(box)
         displayValue = box._lastValidCraftName
     else
         -- Loading dots animation if value has never been seen
-        local maxDots = 3
-        if box._dotCount == nil then box._dotCount = 0 end
-        box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-        displayValue = string.rep(".", box._dotCount)
-        if displayValue == "" then displayValue = "." end
+        displayValue = utils.loadingDots()
     end
 
     -- Set box.value so dashboard/dirty can track change for redraws

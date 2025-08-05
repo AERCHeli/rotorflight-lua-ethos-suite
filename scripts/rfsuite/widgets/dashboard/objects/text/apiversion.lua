@@ -61,15 +61,7 @@ function render.wakeup(box)
     -- Dots loading indicator if value is nil
     local displayValue
     if value == nil then
-        local maxDots = 3
-        if box._dotCount == nil then
-            box._dotCount = 0
-        end
-        box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-        displayValue = string.rep(".", box._dotCount)
-        if displayValue == "" then displayValue = "." end
-    else
-        displayValue = tostring(value)
+        displayValue = utils.loadingDots()
     end
 
     -- Set box.value so dashboard/dirty can track change for redraws

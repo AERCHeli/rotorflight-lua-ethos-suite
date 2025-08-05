@@ -124,16 +124,13 @@ function render.wakeup(box)
     else
         -- Show loading dots while no telemetry data is present
         if totalSize == nil and usedSize == nil then
-            local maxDots = 3
-            if box._dotCount == nil then box._dotCount = 0 end
-            box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-            displayValue = string.rep(".", box._dotCount)
-            if displayValue == "" then displayValue = "." end
+            displayValue = utils.loadingDots()
         else
             displayValue = getParam(box, "novalue") or "-"
         end
         percentUsed = nil
     end
+
 
     -- Suppress unit if we're displaying loading dots
     if type(displayValue) == "string" and displayValue:match("^%.+$") then

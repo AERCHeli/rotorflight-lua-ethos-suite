@@ -85,12 +85,7 @@ function render.wakeup(box)
 
     -- If missing sensors or stats, show animated loading dots
     if not v or not i then
-        local maxDots = 3
-        if box._dotCount == nil then box._dotCount = 0 end
-        box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-        loadingDots = string.rep(".", box._dotCount)
-        if loadingDots == "" then loadingDots = "." end
-        displayValue = loadingDots
+        displayValue = utils.loadingDots()
     end
 
     -- Value resolution (dynamic value or stats)
@@ -107,13 +102,7 @@ function render.wakeup(box)
             if vc and ic then
                 displayValue = tostring(math.floor(vc * ic))
             else
-                -- still show loading dots if sensors missing
-                local maxDots = 3
-                if box._dotCount == nil then box._dotCount = 0 end
-                box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-                loadingDots = string.rep(".", box._dotCount)
-                if loadingDots == "" then loadingDots = "." end
-                displayValue = loadingDots
+                displayValue = utils.loadingDots()
             end
         else
             -- Unknown source

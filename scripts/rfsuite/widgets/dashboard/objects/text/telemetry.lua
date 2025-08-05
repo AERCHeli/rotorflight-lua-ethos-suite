@@ -78,11 +78,7 @@ function render.wakeup(box)
         displayValue = utils.transformValue(value, box)
     else
         -- Animated loading dots if no telemetry value
-        local maxDots = 3
-        if box._dotCount == nil then box._dotCount = 0 end
-        box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-        displayValue = string.rep(".", box._dotCount)
-        if displayValue == "" then displayValue = "." end
+        displayValue = utils.loadingDots()
     end
 
     -- Threshold logic (use localized thresholds)

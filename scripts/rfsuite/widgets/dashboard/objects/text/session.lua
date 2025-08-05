@@ -62,11 +62,7 @@ function render.wakeup(box)
 
     if value == nil then
         -- Animated loading dots if not yet available
-        local maxDots = 3
-        if box._dotCount == nil then box._dotCount = 0 end
-        box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-        displayValue = string.rep(".", box._dotCount)
-        if displayValue == "" then displayValue = "." end
+        displayValue = utils.loadingDots()
         unit = nil
     elseif tostring(value) == "" then
         displayValue = fallbackText

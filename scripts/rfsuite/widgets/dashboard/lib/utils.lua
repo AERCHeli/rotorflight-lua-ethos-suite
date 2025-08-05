@@ -1038,7 +1038,10 @@ function utils.applyOffset(x, y, box)
     return x + ox, y + oy
 end
 
-
-
+-- Returns a string with 1–3 dots, cycling based on os.clock() in ~0.33s intervals
+function utils.loadingDots()
+  local count = (math.floor(os.clock() * 3) % 3) + 1
+  return string.rep(".", count)
+end
 
 return utils

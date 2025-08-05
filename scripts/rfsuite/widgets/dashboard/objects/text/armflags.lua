@@ -98,11 +98,7 @@ function render.wakeup(box)
 
     -- If *neither* value nor disable reason is available, show loading dots
     if displayValue == nil and value == nil and disableflags == nil then
-        local maxDots = 3
-        if box._dotCount == nil then box._dotCount = 0 end
-        box._dotCount = (box._dotCount + 1) % (maxDots + 1)
-        displayValue = string.rep(".", box._dotCount)
-        if displayValue == "" then displayValue = "." end
+        displayValue = utils.loadingDots()
     elseif displayValue == nil then
         displayValue = getParam(box, "novalue") or "-"
     end
