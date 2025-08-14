@@ -9,6 +9,9 @@ import stat
 from tqdm import tqdm
 import re
 import shlex
+import time
+
+DEPLOY_TO_RADIO = False  # flag to control radio-only behavior
 
 def minify_lua_file(filepath):
     print(f"[MINIFY] (luamin) Processing: {filepath}")
@@ -48,31 +51,103 @@ def minify_lua_file(filepath):
         print(f"[MINIFY ERROR] Exception during luamin run: {e}")
 
 
-def get_ethos_scripts_dir(ethos_bin):
-    out = subprocess.check_output(
-        [ethos_bin, "--get-path", "SCRIPTS"],
-        text=True,
-        stderr=subprocess.STDOUT
-    )
 
-    lines = [l.strip() for l in out.splitlines() if l.strip()]
-    if not lines:
-        raise RuntimeError("No output from Ethos Suite.")
+def get_ethos_scripts_dir(ethos_bin, retries=1, delay=5):
+    """
+    Ask Ethos Suite for the SCRIPTS path. Retries after `delay` seconds
+    if the tool returns no path or fails. Raises on final failure.
+    """
+    cmd = [ethos_bin, "--get-path", "SCRIPTS"]
+    last_err = None
 
-    # If the last line starts with 'exit code', grab the previous one
-    if lines[-1].lower().startswith("exit code") and len(lines) >= 2:
-        path_line = lines[-2]
-    else:
-        path_line = lines[-1]
+    for attempt in range(retries + 1):
+        try:
+            result = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                timeout=15
+            )
 
-    return os.path.normpath(path_line)
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode, cmd, output=result.stdout, stderr=result.stderr
+                )
 
+            lines = [l.strip() for l in (result.stdout or "").splitlines() if l.strip()]
+            if not lines:
+                raise RuntimeError("No output from Ethos Suite.")
 
+            # If the last line starts with 'exit code', grab the previous one
+            if lines[-1].lower().startswith("exit code") and len(lines) >= 2:
+                path_line = lines[-2]
+            else:
+                path_line = lines[-1]
+
+            return os.path.normpath(path_line)
+
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, RuntimeError) as e:
+            last_err = e
+            if attempt < retries:
+                print(f"[ETHOS] Could not get SCRIPTS path (attempt {attempt+1}/{retries+1}). Retrying in {delay}s…")
+                time.sleep(delay)
+            else:
+                raise last_err
 # Permission handler for Windows rm errors
 def on_rm_error(func, path, exc_info):
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
+
+def flush_fs():
+    """Attempt to flush filesystem buffers (best-effort)."""
+    try:
+        if hasattr(os, "sync"):
+            os.sync()
+    except Exception as e:
+        print(f"[WARN] os.sync failed: {e}")
+
+def safe_full_copy(srcall, out_dir):
+    """Safer full-copy for slow FAT32 targets:
+    - If current target exists, rotate it to '<target>.old'
+    - Delete the '<target>.old' folder
+    - Copy new files freshly into '<target>'
+    Includes small delays + best-effort flushes to give the device time to settle.
+    """
+    global pbar
+    if os.path.isdir(out_dir):
+        old_dir = out_dir + ".old"
+
+        # If a previous backup exists, remove it first
+        if os.path.isdir(old_dir):
+            print("Deleting previous backup…")
+            shutil.rmtree(old_dir, onerror=on_rm_error)
+            flush_fs()
+            time.sleep(2)
+
+        # Rotate current folder to .old
+        try:
+            print(f"Renaming existing to {os.path.basename(old_dir)}…")
+            os.replace(out_dir, old_dir)  # Atomic on same volume
+        except Exception as e:
+            print(f"[WARN] Rename failed ({e}). Falling back to direct delete.")
+            print("Deleting files…")
+            shutil.rmtree(out_dir, onerror=on_rm_error)
+        flush_fs()
+        time.sleep(2)
+
+        # Delete the rotated .old folder
+        if os.path.isdir(old_dir):
+            print("Deleting files…")
+            shutil.rmtree(old_dir, onerror=on_rm_error)
+            flush_fs()
+            time.sleep(2)
+
+    print("Copying files…")
+    total = count_files(srcall)
+    pbar = tqdm(total=total)
+    shutil.copytree(srcall, out_dir, dirs_exist_ok=True, copy_function=copy_verbose)
+    pbar.close()
 # Load config from environment variable only
 CONFIG_PATH = os.environ.get('RFSUITE_CONFIG')
 
@@ -98,7 +173,11 @@ pbar = None
 
 def copy_verbose(src, dst):
     pbar.update(1)
+    if DEPLOY_TO_RADIO and os.path.getsize(src) > 5 * 1024:
+        flush_fs()
+        time.sleep(0.1)
     shutil.copy(src, dst)
+
 
 def count_files(dirpath, ext=None):
     total = 0
@@ -166,17 +245,15 @@ def copy_files(src_override, fileext, targets):
                         shutil.copy(srcf, dstf)
                         print(f"Copy {f}")
 
+        
         # full
         else:
-            if os.path.isdir(out_dir):
-                shutil.rmtree(out_dir, onerror=on_rm_error)
             srcall = os.path.join(git_src, 'scripts', tgt)
-            total = count_files(srcall)
-            pbar = tqdm(total=total)
-            shutil.copytree(srcall, out_dir, dirs_exist_ok=True, copy_function=copy_verbose)
-            pbar.close()
+            safe_full_copy(srcall, out_dir)
+            flush_fs()
+            time.sleep(2)
 
-        print(f"Done: {t['name']}\n")
+            print(f"Done: {t['name']}\n")
 
 # Launch sims
 def launch_sims(targets):
@@ -201,14 +278,28 @@ def main():
     p.add_argument('--minify',    action='store_true')
     args = p.parse_args()
 
+    DEPLOY_TO_RADIO = args.radio 
+
     # load override config
     if args.config != CONFIG_PATH:
         with open(args.config) as f:
             config.update(json.load(f))
 
     # select targets
+    
     if args.radio:
-        rd = get_ethos_scripts_dir(config['ethos_bin'])
+        try:
+            rd = get_ethos_scripts_dir(config['ethos_bin'], retries=1, delay=5)
+        except Exception as e:
+            print("[ERROR] Failed to obtain Ethos SCRIPTS path.")
+            print(f"        Reason: {e}")
+            # Beep in VS Code terminal (if enabled) or Windows
+            try:
+                import winsound
+                winsound.MessageBeep()
+            except Exception:
+                print("", end="", flush=True)
+            return 1
         targets = [{'name': 'Radio', 'dest': rd, 'simulator': None}]
     else:
         tlist=config['deploy_targets']
@@ -245,4 +336,9 @@ def main():
         )
 
 if __name__=='__main__':
-    main()
+    rc = main()
+    try:
+        import sys
+        sys.exit(rc if isinstance(rc, int) else 0)
+    except SystemExit:
+        pass
