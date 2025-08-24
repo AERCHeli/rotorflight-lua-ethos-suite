@@ -680,7 +680,6 @@ app._uiTasks = {
     if (app.dialogs.nolinkDisplay and not app.triggers.wasConnected) then
       local offline       = app.offlineMode == true
       local apiStr        = tostring(rfsuite.session.apiVersion or "")
-      local moduleEnabled = rfsuite.session.telemetryModule and rfsuite.session.telemetryModule:enable() or false
       local curRssi       = app.utils.getRSSI()
 
       local invalid, abort = false, false
@@ -694,22 +693,7 @@ app._uiTasks = {
       elseif not rfsuite.tasks.active() then
         msg, invalid, abort = i18n("app.check_bg_task"), true, true
 
-      -- 3) RF module on? (invalid, unless offline)
-      elseif (not moduleEnabled) and (not offline) then
-        msg, invalid = i18n("app.check_rf_module_on"), true
-
-      -- 4) Sensors discovered? (invalid, unless offline)
-      elseif (not rfsuite.session.telemetrySensor) and (not offline) then
-        msg, invalid = i18n("app.check_discovered_sensors"), true
-
-      -- 5) Heli on / link power (RSSI==0) (invalid, unless offline)
-      elseif (curRssi == 0) and (not offline) then
-        msg, invalid = i18n("app.check_heli_on"), true
-
-      -- 6) Supported API version notice (message only, not "invalid")
-      elseif (not app.utils.stringInArray(rfsuite.config.supportedMspApiVersion, apiStr)) and (not offline) then
-        msg = i18n("app.check_supported_version") .. " (" .. apiStr .. ")"
-      end
+      end  
 
       app.triggers.invalidConnectionSetup = invalid
 
@@ -781,7 +765,7 @@ app._uiTasks = {
     if not app.triggers.showSaveArmedWarning or app.triggers.closeSave then return end
     if not app.dialogs.progressDisplay then
       app.dialogs.progressCounter = 0
-      local key = (rfsuite.session.apiVersion >= 12.08 and "app.msg_please_disarm_to_save_warning" or "app.msg_please_disarm_to_save")
+      local key = (rfsuite.utils.apiVersionCompare(">=", "12.08") and "app.msg_please_disarm_to_save_warning" or "app.msg_please_disarm_to_save")
       app.ui.progressDisplay(i18n("app.msg_save_not_commited"), i18n(key))
     end
     if app.dialogs.progressCounter >= 100 then

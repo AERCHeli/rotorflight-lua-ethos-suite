@@ -63,7 +63,7 @@ local function loadSensorModule()
             loadedSensorModule = {name = "elrs", module = assert(rfsuite.compiler.loadfile("tasks/sensors/elrs.lua"))(config)}
         end
     elseif protocol == "sport" then
-        if rfsuite.utils.round(rfsuite.session.apiVersion,2) >= 12.08 then
+        if rfsuite.utils.apiVersionCompare(">=", "12.08") then
             if not loadedSensorModule or loadedSensorModule.name ~= "frsky" then
                 --log("Loading FrSky sensor module","info")
                 loadedSensorModule = {name = "frsky", module = assert(rfsuite.compiler.loadfile("tasks/sensors/frsky.lua"))(config)}
@@ -94,8 +94,6 @@ function sensors.wakeup()
             log("Delay complete; resuming sensor wakeup","info")
             delayPending = false
         else
-            local module = rfsuite.session.telemetryModule
-            if module ~= nil and module.muteSensorLost ~= nil then module:muteSensorLost(5.0) end
             return  -- Still waiting; do nothing
         end
     end
