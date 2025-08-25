@@ -54,8 +54,12 @@ function ui.progressDisplay(title, message, speed)
                 mult = 2
             end
 
+            local isProcessing = (app.Page and app.Page.apidata and app.Page.apidata.apiState and app.Page.apidata.apiState.isProcessing) or false
+
             if not app.triggers.closeProgressLoader then
                 app.dialogs.progressCounter = app.dialogs.progressCounter + (2 * mult)
+            elseif isProcessing then    
+                app.dialogs.progressCounter = app.dialogs.progressCounter + (3 * mult)
             elseif app.triggers.closeProgressLoader and rfsuite.tasks.msp.mspQueue:isProcessed() then   -- this is the one we normally catch
                 app.dialogs.progressCounter = app.dialogs.progressCounter + (15 * mult)
                 if app.dialogs.progressCounter >= 100 then
@@ -98,64 +102,6 @@ function ui.progressDisplay(title, message, speed)
     rfsuite.app.dialogs.progress:closeAllowed(false)
 end
 
--- Connecting… progress (no link).
-function ui.progressNolinkDisplay()
-    rfsuite.app.dialogs.nolinkDisplay = true
-
-    rfsuite.app.dialogs.noLink = form.openProgressDialog({
-        title   = i18n("app.msg_connecting"),
-        message = i18n("app.msg_connecting_to_fbl"),
-        close   = function() 
-                  end,
-        wakeup  = function()
-            local app = rfsuite.app
-            local utils = rfsuite.utils
-
-            local offline       = app.offlineMode == true
-            local apiStr        = tostring(rfsuite.session.apiVersion or "")
-            local curRssi       = app.utils.getRSSI()
-
-            local invalid, abort = false, false
-            local msg = i18n("app.msg_connecting_to_fbl")
-
-            -- 1) ETHOS version (hard stop text, but not "invalid" so progress continues)
-            if not utils.ethosVersionAtLeast() then
-                msg = string.format("%s < V%d.%d.%d", string.upper(i18n("ethos")), table.unpack(rfsuite.config.ethosVersion))
-            -- 2) Background task (invalid + abort)
-            elseif not rfsuite.tasks.active() then
-                msg, invalid, abort = i18n("app.check_bg_task"), true, true
-            end  
-
-            app.triggers.invalidConnectionSetup = invalid
-
-            -- Progress the dialog (bigger steps when invalid so the user gets feedback faster)
-            local step = invalid and 20 or 40
-            app.dialogs.nolinkValueCounter = app.dialogs.nolinkValueCounter + step
-
-            if rfsuite.app.dialogs.noLink then
-                rfsuite.app.dialogs.noLink:value(app.dialogs.nolinkValueCounter)
-                rfsuite.app.dialogs.noLink:message(msg)
-            end
-
-            -- One-time audible nudge when we first mark it invalid
-            if invalid and app.dialogs.nolinkValueCounter == 10 then
-                app.audio.playBufferWarn = true
-            end
-
-            -- Finish: hide dialog and optionally abort app if bg tasks missing
-            if app.dialogs.nolinkValueCounter >= 100 then
-                app.dialogs.nolinkDisplay = false
-                app.triggers.wasConnected = true
-                if rfsuite.app.dialogs.noLink then rfsuite.app.dialogs.noLink:close() end
-                if abort then app.close() end
-            end
-        end
-    })
-
-    rfsuite.app.dialogs.noLink:closeAllowed(false)
-    rfsuite.app.dialogs.noLink:value(0)
-end
-
 -- Show a "Saving…" progress dialog.
 function ui.progressDisplaySave(message)
     local app = rfsuite.app
@@ -181,8 +127,12 @@ function ui.progressDisplaySave(message)
 
             app.dialogs.save:value(app.dialogs.saveProgressCounter)
 
+            local isProcessing = (app.Page and app.Page.apidata and app.Page.apidata.apiState and app.Page.apidata.apiState.isProcessing) or false
+
             if not app.dialogs.saveProgressCounter then
                 app.dialogs.saveProgressCounter = app.dialogs.saveProgressCounter + 1
+            elseif isProcessing then
+                app.dialogs.saveProgressCounter = app.dialogs.saveProgressCounter + 3                     
             elseif app.triggers.closeSaveFake then
                 app.dialogs.saveProgressCounter = app.dialogs.saveProgressCounter + 5
                 if app.dialogs.saveProgressCounter >= 100 then
@@ -191,7 +141,7 @@ function ui.progressDisplaySave(message)
                     app.dialogs.saveDisplay         = false
                     app.dialogs.saveWatchDog        = nil
                     app.dialogs.save:close()
-                end
+                end           
             elseif rfsuite.tasks.msp.mspQueue:isProcessed() then
                 app.dialogs.saveProgressCounter = app.dialogs.saveProgressCounter + 15
                 if app.dialogs.saveProgressCounter >= 100 then

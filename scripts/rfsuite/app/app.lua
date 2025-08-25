@@ -164,11 +164,7 @@ app.dialogs.saveRateLimit     = os.clock()
 app.dialogs.saveRate          = 0.25
 
 -- No-link dialog
-app.dialogs.nolink            = false
 app.dialogs.nolinkDisplay     = false
-app.dialogs.nolinkValueCounter= 0
-app.dialogs.nolinkRateLimit   = os.clock()
-app.dialogs.nolinkRate        = 0.25
 
 -- Bad version dialog
 app.dialogs.badversion        = false
@@ -249,6 +245,8 @@ local function saveSettings()
   local totalRequests    = #apiList
   local completedRequests= 0
 
+  rfsuite.app.Page.apidata.apiState.isProcessing = true
+
   if app.Page.preSave then app.Page.preSave(app.Page) end
 
   for apiID, apiNAME in ipairs(apiList) do
@@ -268,6 +266,7 @@ local function saveSettings()
         log("All API requests have been completed!", "debug")
         if app.Page.postSave then app.Page.postSave(app.Page) end
         app.settingsSaved()
+        rfsuite.app.Page.apidata.apiState.isProcessing = false
       end
     end)
 
@@ -673,7 +672,7 @@ app._uiTasks = {
       if not app.dialogs.nolinkDisplay and not app.triggers.wasConnected then
         if app.dialogs.progressDisplay and app.dialogs.progress then app.dialogs.progress:close() end
         if app.dialogs.saveDisplay and app.dialogs.save then app.dialogs.save:close() end
-        app.ui.progressNolinkDisplay()
+        app.ui.progressDisplay(i18n("app.msg_connecting"),i18n("app.msg_connecting_to_fbl"),true)
         app.dialogs.nolinkDisplay = true
       end
     end
