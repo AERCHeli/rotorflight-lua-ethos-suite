@@ -158,7 +158,9 @@ function MspQueueController:processQueue()
 
     if rfsuite.session.telemetryModule then
         local module = rfsuite.session.telemetryModule
-        if module and module.muteSensorLost then module:muteSensorLost(2.0) end
+        if module and module.muteSensorLost then
+            module:muteSensorLost(5.0)
+        end
     end
 
     -- Load a new current message if needed
