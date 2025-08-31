@@ -109,7 +109,8 @@ return {
       ["timing_angle"] = "Timing angle for the motor",
       ["response_speed"] = "Response speed for the motor",
       ["current_gain"] = "Gain value for the current sensor",
-      ["tbl_extgov"] = "External Governor",
+      ["tbl_linear_thr"] = "Linear Throttle",
+      ["tbl_rf_gov"] = "RF Gyro Governor",
       ["buzzer_volume"] = "Buzzer volume",
       ["drive_freq"] = "PWM drive frequency",
       ["tbl_enabled"] = "Enabled",
@@ -442,6 +443,10 @@ return {
     ["msg_connecting_to_fbl"] = "Connecting to flight controller...",
     ["navigation_help"] = "?",
     ["modules"] = {
+      ["diagnostics"] = {
+        ["name"] = "Diagnostics",
+        ["help_p1"] = "This module provides various tools to help diagnose issues with your flight controller or configuration."
+      },
       ["stats"] = {
         ["name"] = "Stats",
         ["totalflighttime"] = "Total Flight Time",
@@ -511,6 +516,7 @@ return {
         ["bec_threshold"] = "Threshold (V)",
         ["fuel"] = "Fuel",
         ["fuel_callout_default"] = "Default (Only at 10%)",
+        ["fuel_callout_5"] = "50% and 5%",
         ["fuel_callout_10"] = "Every 10%",
         ["fuel_callout_20"] = "Every 20%",
         ["fuel_callout_25"] = "Every 25%",

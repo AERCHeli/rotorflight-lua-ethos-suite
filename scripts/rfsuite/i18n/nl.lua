@@ -109,7 +109,8 @@ return {
       ["timing_angle"] = "Timing voor de motor",
       ["response_speed"] = "Respons snelheid voor de motor",
       ["current_gain"] = "Gain waarde voor stroomsensor",
-      ["tbl_extgov"] = "Externe Governor",
+      ["tbl_linear_thr"] = "Linear Throttle",
+      ["tbl_rf_gov"] = "RF Gyro Governor",
       ["buzzer_volume"] = "Buzzer volume",
       ["drive_freq"] = "PWM drive frequency",
       ["tbl_enabled"] = "Aan",
@@ -442,6 +443,10 @@ return {
     ["msg_connecting_to_fbl"] = "Verbinden met vliegcontroller...",
     ["navigation_help"] = "?",
     ["modules"] = {
+      ["diagnostics"] = {
+        ["name"] = "Diagnostics",
+        ["help_p1"] = "This module provides various tools to help diagnose issues with your flight controller or configuration."
+      },
       ["stats"] = {
         ["name"] = "Status",
         ["totalflighttime"] = "Totale Flight tijd",
@@ -511,6 +516,7 @@ return {
         ["bec_threshold"] = "Limiet (V)",
         ["fuel"] = "Brandstof",
         ["fuel_callout_default"] = "Standaard (Alleen per 10%)",
+        ["fuel_callout_5"] = "50% and 5%",
         ["fuel_callout_10"] = "Elke 10%",
         ["fuel_callout_20"] = "Elke 20%",
         ["fuel_callout_25"] = "Elke 25%",
