@@ -15,15 +15,17 @@
  
  * Note.  Some icons have been sourced from https://www.flaticon.com/
  * 
+
 ]] --
-local init = {
-    interval        = 1.0,                  -- run every 1.0 seconds
-    script          = "adjfunctions.lua",   -- run this script
-    linkrequired    = true,                 -- run this script only if link is established
-    connected       = true,            -- run this script only if msp is connected
-    spreadschedule  = true,                 -- run on every loop   
-    simulatoronly   = false,                -- run this script in simulation mode 
+ local i18n = rfsuite.i18n.get
+local data = {}
+
+data['help'] = {}
+
+data['help']['default'] = {
+    i18n("app.modules.mixer.help_p1")
 }
 
+data['fields'] = {}
 
-return init
+return data

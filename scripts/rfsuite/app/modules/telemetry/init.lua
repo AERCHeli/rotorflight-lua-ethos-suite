@@ -15,15 +15,16 @@
  
  * Note.  Some icons have been sourced from https://www.flaticon.com/
  * 
+
 ]] --
 local init = {
-    interval        = 1.0,                  -- run every 1.0 seconds
-    script          = "adjfunctions.lua",   -- run this script
-    linkrequired    = true,                 -- run this script only if link is established
-    connected       = true,            -- run this script only if msp is connected
-    spreadschedule  = true,                 -- run on every loop   
-    simulatoronly   = false,                -- run this script in simulation mode 
+    title = rfsuite.i18n.get("app.modules.telemetry.name"), -- title of the page
+    section = "hardware", -- do not run if busy with msp
+    script = "telemetry.lua", -- run this script
+    image = "telemetry.png", -- image for the page
+    order = 4, -- order in the section
+    developer = false, -- hide this page if true
+    ethosversion = {1, 6, 2} -- disable button if ethos version is less than this
 }
-
 
 return init
