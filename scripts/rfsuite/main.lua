@@ -87,11 +87,14 @@ local userpref_defaults = {
     logtofile = false, -- log to file
     loglevel = "off", -- off, info, debug
     logmsp = false, -- print msp byte stream
+    logobjprof = false, -- periodic print object references
     logmspQueue = false, -- periodic print the msp queue size
     memstats = false, -- periodic print memory usage
     taskprofiler = false, -- periodic print task profile
     mspexpbytes = 8,
     apiversion = 2, -- msp api version to use for simulator
+    overlaystats = false, -- show cpu load in overlay
+    overlaygrid = false, -- show overlay grid
   },
   timer = {
     timeraudioenable = false,

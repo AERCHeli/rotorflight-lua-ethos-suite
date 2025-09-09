@@ -27,6 +27,22 @@ local usingSimulator = system.getVersion().simulation
 
 local tlm = system.getSource({ category = CATEGORY_SYSTEM_EVENT, member = TELEMETRY_ACTIVE })
 
+-- track cpu
+local CPU_TICK_HZ     = 20
+
+-- Track the start time of the previous wakeup for accurate utilization
+local last_wakeup_start = nil
+local CPU_TICK_BUDGET = 1 / CPU_TICK_HZ
+local CPU_ALPHA       = 0.2
+local cpu_avg         = 0
+
+-- track memory
+local MEM_ALPHA   = 0.2
+local mem_avg_kb  = 0
+local last_mem_t  = 0
+local MEM_PERIOD  = 2.0   -- seconds between samples
+
+
 -- =========================
 -- Profiler config & helpers
 -- =========================
@@ -214,6 +230,9 @@ function tasks.telemetryCheckScheduler()
 
         if not telemetryState then
             utils.session()
+            if rfsuite.tasks and rfsuite.tasks.msp and rfsuite.tasks.msp.mspQueue  then
+                rfsuite.tasks.msp.mspQueue:clear()
+            end     
         else
             sportSensor = system.getSource({ appId = 0xF101 })
             elrsSensor = system.getSource({ crsfId = 0x14, subIdStart = 0, subIdEnd = 1 })
@@ -221,6 +240,9 @@ function tasks.telemetryCheckScheduler()
 
             if not currentTelemetrySensor then
                 utils.session()
+                if rfsuite.tasks and rfsuite.tasks.msp and rfsuite.tasks.msp.mspQueue  then
+                    rfsuite.tasks.msp.mspQueue:clear()
+                end                
             else
                 rfsuite.session.telemetryState = true
                 rfsuite.session.telemetrySensor = currentTelemetrySensor
@@ -466,6 +488,46 @@ function tasks.wakeup()
             tasks._lastProfileDump = now
         end
     end
+
+    -- track average cpu load
+    
+  -- Accurate CPU utilization: work_time / wall_time_between_wakeups
+  local t_end = os.clock()
+  local work_elapsed = t_end - now
+
+  local dt
+  if last_wakeup_start ~= nil then
+    dt = now - last_wakeup_start
+  else
+    dt = (1 / CPU_TICK_HZ)
+  end
+
+  -- Guard against pathological tiny dt (e.g., re-entrancy)
+  if dt < (0.25 * (1 / CPU_TICK_HZ)) then
+    dt = (1 / CPU_TICK_HZ)
+  end
+
+  local instant_util = work_elapsed / dt   -- 0..∞
+  cpu_avg = CPU_ALPHA * instant_util + (1 - CPU_ALPHA) * cpu_avg
+  rfsuite.session.cpuload = math.min(100, math.max(0, cpu_avg * 100))
+
+  last_wakeup_start = now
+
+
+    -- track average memory usage
+    do
+        local now = os.clock()
+        if (now - last_mem_t) >= MEM_PERIOD then
+            last_mem_t = now
+            local m = system.getMemoryUsage()
+            if m and m.luaRamAvailable then
+                local free_now = m.luaRamAvailable / 1000
+                mem_avg_kb = MEM_ALPHA * free_now + (1 - MEM_ALPHA) * mem_avg_kb
+                rfsuite.session.freeram = mem_avg_kb
+            end
+        end
+    end
+
 end
 
 function tasks.reset()

@@ -135,6 +135,21 @@
         "translation": "Einstellungen",
         "needs_translation": false
       },
+      "dashboard": {
+        "english": "Dashboard",
+        "translation": "Dashboard",
+        "needs_translation": false
+      },
+      "txt_overlaygrid": {
+        "english": "Show grid",
+        "translation": "Gitter anzeigen",
+        "needs_translation": false
+      },
+      "txt_overlaystats": {
+        "english": "Show stats",
+        "translation": "Statistiken anzeigen",
+        "needs_translation": false
+      },
       "no_themes_available_to_configure": {
         "english": "No configurable themes installed on this device",
         "translation": "Keine konfigurierbaren Designs auf dem Geraet installiert.",
@@ -198,6 +213,11 @@
       "txt_logging": {
         "english": "Logging",
         "translation": "Protokollierung",
+        "needs_translation": false
+      },
+      "txt_objectprofiler": {
+        "english": "Log dashboard speed",
+        "translation": "Dashboard-Geschw. protokollieren",
         "needs_translation": false
       },
       "txt_compilation": {
@@ -278,11 +298,6 @@
       "txt_battdig": {
         "english": "Digital",
         "translation": "Digital",
-        "needs_translation": false
-      },
-      "dashboard": {
-        "english": "Dashboard",
-        "translation": "Dashboard",
         "needs_translation": false
       },
       "dashboard_theme": {
@@ -1788,7 +1803,57 @@
     "profile_governor": {
       "tail_torque_assist": {
         "english": "Tail Torque Assist",
-        "translation": "Heck-Drehmoment",
+        "translation": "Heckmomenthilfe",
+        "needs_translation": false
+      },
+      "fc_throttle_curve": {
+        "english": "FC Throttle Curve",
+        "translation": "FC-Gaskurve",
+        "needs_translation": false
+      },
+      "tx_precomp_curve": {
+        "english": "TX Precomp Curve",
+        "translation": "TX-Vorkomp.Kurve",
+        "needs_translation": false
+      },
+      "fallback_precomp": {
+        "english": "Fallback Precomp",
+        "translation": "Fallback-Vorkomp.",
+        "needs_translation": false
+      },
+      "voltage_comp": {
+        "english": "Voltage Comp",
+        "translation": "Spannungskomp.",
+        "needs_translation": false
+      },
+      "pid_spoolup": {
+        "english": "PID Spoolup",
+        "translation": "PID-Spoolup",
+        "needs_translation": false
+      },
+      "hs_adjustment": {
+        "english": "HS Adjustment",
+        "translation": "Drehz.Anpassung",
+        "needs_translation": false
+      },
+      "dyn_min_throttle": {
+        "english": "Dyn. Min Throttle",
+        "translation": "Dyn.Min.Gas",
+        "needs_translation": false
+      },
+      "autorotation": {
+        "english": "Autorotation",
+        "translation": "Autorotation",
+        "needs_translation": false
+      },
+      "suspend": {
+        "english": "Suspend",
+        "translation": "Pause",
+        "needs_translation": false
+      },
+      "bypass": {
+        "english": "Bypass",
+        "translation": "Bypass",
         "needs_translation": false
       },
       "p": {
@@ -2597,6 +2662,11 @@
       "menu_general": {
         "english": "General",
         "translation": "Allgemein",
+        "needs_translation": false
+      },
+      "menu_flags": {
+        "english": "Flags",
+        "translation": "Flags",
         "needs_translation": false
       },
       "menu_filters": {
@@ -3672,6 +3742,11 @@
       "arming_disable_flag_9": {
         "english": "Boot Grace Time",
         "translation": "Boot-Grace-Zeit",
+        "needs_translation": false
+      },
+      "arming_disable_flag_6": {
+        "english": "RPM Signal",
+        "translation": "RPM-Signal",
         "needs_translation": false
       },
       "megabyte": {
