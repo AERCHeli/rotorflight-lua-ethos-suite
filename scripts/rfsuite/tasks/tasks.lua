@@ -22,6 +22,7 @@ tasks._initIndex = 1
 local ethosVersionGood = nil
 local telemetryCheckScheduler = os.clock()
 local lastTelemetrySensorName, sportSensor, elrsSensor = nil, nil, nil
+local lastModuleId = 0
 
 local usingSimulator = system.getVersion().simulation
 
@@ -247,12 +248,20 @@ function tasks.telemetryCheckScheduler()
                 rfsuite.session.telemetryState = true
                 rfsuite.session.telemetrySensor = currentTelemetrySensor
 
-                local module = model.getModule(rfsuite.session.telemetrySensor:module())
+                local sensorModule = rfsuite.session.telemetrySensor:module()
+                local module = model.getModule(sensorModule)
                 rfsuite.session.telemetryModule = module
                 rfsuite.session.telemetryType = sportSensor and "sport" or elrsSensor and "crsf" or nil
                 rfsuite.session.telemetryTypeChanged = currentTelemetrySensor:name() ~= lastTelemetrySensorName
                 lastTelemetrySensorName = currentTelemetrySensor:name()
                 telemetryCheckScheduler = now
+
+                if lastModuleId ~= sensorModule then
+                    lastModuleId = sensorModule
+                    rfsuite.utils.log("Module ID changed, resetting session","info")
+                    rfsuite.session.telemetryTypeChanged = true
+                end
+
             end
         end
     end
@@ -590,6 +599,22 @@ function tasks.resetProfile()
         t.maxDuration = 0
     end
     utils.log("[profile] Cleared profiling stats", "info")
+end
+
+function tasks.event(widget, category, value, x, y)
+    print("Event:", widget, category, value, x, y)
+end
+
+function tasks.init()
+    --print("Init:")
+end
+
+function tasks.read()
+    --print("Read:")
+end
+
+function tasks.write()
+    --print("Write:")
 end
 
 return tasks
