@@ -249,6 +249,9 @@ end
 --]]
 -- telemetryPop: short-circuit based on status
 local function telemetryPop()
+    
+    if not rfsuite.tasks.msp.sensorTlm then return false end
+
     local frame = rfsuite.tasks.msp.sensorTlm:popFrame()
     if frame == nil then return false end
     if not frame.physId or not frame.primId then return false end
@@ -291,7 +294,7 @@ function frsky_legacy.wakeup()
 
     if rfsuite.app and rfsuite.app.guiIsRunning == false and rfsuite.tasks.msp.mspQueue:isProcessed() then
         local discoverActive = (system and system.isSensorDiscoverActive and system.isSensorDiscoverActive() == true)
-
+            rfsuite.utils.log("FRSKY: Discovery active, draining all frames", "info")
         if discoverActive then
             while telemetryPop() do end      -- unbounded for discovery
         else

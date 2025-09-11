@@ -1,17 +1,65 @@
--- Simplified Task Scheduler with single `interval`
+--[[
 
+ * Copyright (C) Rotorflight Project
+ *
+ *
+ * License GPLv3: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ 
+ * Note.  Some icons have been sourced from https://www.flaticon.com/
+ * 
+
+-- Task scheduler timing notes:
+--   - The scheduler tick runs at 20 Hz (every 50 ms).
+--   - Spread tasks can run as often as every tick (minimum ~0.05 s).
+--   - Non-spread tasks are only checked every other tick (minimum ~0.1 s).
+--   - A small random jitter (~+0.1 s) is applied when tasks are loaded, 
+--     so very short intervals will often be rounded upward.
+--
+-- Useful for periodic operations that require sub-second timing.
+
+-- The tasks flip with running each on a different cycle is important.
+-- It prevents the system 'bogging down' if many tasks are due at the same time.
+-- It also helps to spread out CPU load, which is important for accurate CPU timing.
+
+-- An example for a task meta info is as follows
+
+-- local init = {
+--     interval        = 0.25,            -- run every 0.25 seconds.  Note. Minimum interval is ~0.05s
+--     script          = "sensors.lua",   -- run this script
+--     linkrequired    = true,            -- run this script only if link is established
+--     spreadschedule  = false,           -- run on every loop
+--     simulatoronly   = false,           -- run this script in simulation mode
+--     connected       = true,            -- run this script only if msp is connected
+-- }
+
+]] --
+
+-- keep these constant / cheap definitions at file scope
 local utils = rfsuite.utils
 local compiler = rfsuite.compiler.loadfile
 
 local currentTelemetrySensor
-local tasksPerCycle = 1
-local taskSchedulerPercentage = 0.5
+local tasksPerCycle
+local taskSchedulerPercentage
 
-local schedulerTick = 0
-
+local schedulerTick
+local lastSensorName
 local tasks, tasksList = {}, {}
-tasks.heartbeat, tasks.init, tasks.wasOn = nil, true, false
-rfsuite.session.telemetryTypeChanged = true
+tasks.heartbeat, tasks.begin, tasks.wasOn = nil, nil, false  -- begin nil by default
+
+
+local currentSensor, currentModuleId, currentTelemetryType
+local internalModule, externalModule
+
 
 tasks._justInitialized = false
 tasks._initState = "start"
@@ -19,29 +67,34 @@ tasks._initMetadata = nil
 tasks._initKeys = nil
 tasks._initIndex = 1
 
-local ethosVersionGood = nil
-local telemetryCheckScheduler = os.clock()
-local lastTelemetrySensorName, sportSensor, elrsSensor = nil, nil, nil
-local lastModuleId = 0
+local ethosVersionGood
+local telemetryCheckScheduler = os.clock  -- keep reference, actual timers set later
+
+local lastCheckAt
+local lastTelemetryType
+
+local lastNameCheckAt = 0
+local NAME_CHECK_INTERVAL = 2.0
 
 local usingSimulator = system.getVersion().simulation
 
-local tlm = system.getSource({ category = CATEGORY_SYSTEM_EVENT, member = TELEMETRY_ACTIVE })
+local tlm 
 
--- track cpu
+-- CPU constants (cheap -> keep)
 local CPU_TICK_HZ     = 20
+local SCHED_DT        = 1 / CPU_TICK_HZ
+local OVERDUE_TOL     = SCHED_DT * 0.25
 
--- Track the start time of the previous wakeup for accurate utilization
-local last_wakeup_start = nil
-local CPU_TICK_BUDGET = 1 / CPU_TICK_HZ
-local CPU_ALPHA       = 0.2
-local cpu_avg         = 0
+-- CPU/mem moving-average state (declare only)
+local last_wakeup_start
+local CPU_TICK_BUDGET
+local CPU_ALPHA
+local cpu_avg
 
--- track memory
-local MEM_ALPHA   = 0.2
-local mem_avg_kb  = 0
-local last_mem_t  = 0
-local MEM_PERIOD  = 2.0   -- seconds between samples
+local MEM_ALPHA
+local mem_avg_kb
+local last_mem_t
+local MEM_PERIOD
 
 
 -- =========================
@@ -109,7 +162,7 @@ function tasks.dumpSchedule()
     local in_secs  = next_run - now
     utils.log(
       string.format(
-        "%-15s | interval: %4.1fs | last_run: %8.2f | next in: %6.2fs",
+        "%-15s | interval: %4.3fs | last_run: %8.3f | next in: %6.3fs",
         t.name, t.interval, t.last_run, in_secs
       ),
       "info"
@@ -178,7 +231,7 @@ function tasks.findTasks()
                     local scriptPath = taskPath .. dir .. "/" .. tconfig.script
                     local fn, loadErr = compiler(scriptPath)
                     if fn then
-                        tasks[dir] = fn(config)
+                        tasks[dir] = fn(config)  -- assumes global 'config'
                     else
                         utils.log("Failed to load task script " .. scriptPath .. ": " .. loadErr, "warn")
                     end
@@ -220,51 +273,93 @@ function tasks.findTasks()
     return taskMetadata
 end
 
+local function clearSessionAndQueue()
+    tasks.setTelemetryTypeChanged()
+    utils.session()
+    local q = rfsuite.tasks and rfsuite.tasks.msp and rfsuite.tasks.msp.mspQueue
+    if q then q:clear() end
+
+    internalModule = nil
+    externalModule = nil
+    currentSensor = nil
+    currentModuleId = nil
+    currentTelemetryType = nil
+
+end
+
+-- Telemetry check scheduler: 
 function tasks.telemetryCheckScheduler()
+
     local now = os.clock()
 
-    if now - (telemetryCheckScheduler or 0) >= 2 then
-        local telemetryState = tlm and tlm:state() or false
-        if rfsuite.simevent.telemetry_state == false and system.getVersion().simulation then
-            telemetryState = false
-        end
+    local telemetryState = (tlm and tlm:state()) or false
+    if system.getVersion().simulation and rfsuite.simevent.telemetry_state == false then
+        telemetryState = false
+    end
 
-        if not telemetryState then
-            utils.session()
-            if rfsuite.tasks and rfsuite.tasks.msp and rfsuite.tasks.msp.mspQueue  then
-                rfsuite.tasks.msp.mspQueue:clear()
-            end     
-        else
-            sportSensor = system.getSource({ appId = 0xF101 })
-            elrsSensor = system.getSource({ crsfId = 0x14, subIdStart = 0, subIdEnd = 1 })
-            currentTelemetrySensor = sportSensor or elrsSensor
+    -- early out if link is down
+    if not telemetryState then
+        return clearSessionAndQueue()
+    end
 
-            if not currentTelemetrySensor then
-                utils.session()
-                if rfsuite.tasks and rfsuite.tasks.msp and rfsuite.tasks.msp.mspQueue  then
-                    rfsuite.tasks.msp.mspQueue:clear()
-                end                
-            else
-                rfsuite.session.telemetryState = true
-                rfsuite.session.telemetrySensor = currentTelemetrySensor
+    -- fast path: if we already have a sensor, don’t rescan every time
+    if currentSensor then
+       rfsuite.session.telemetryState  = true
+       rfsuite.session.telemetrySensor = currentSensor
+       rfsuite.session.telemetryModule = currentModuleId
+       rfsuite.session.telemetryType   = currentTelemetryType 
 
-                local sensorModule = rfsuite.session.telemetrySensor:module()
-                local module = model.getModule(sensorModule)
-                rfsuite.session.telemetryModule = module
-                rfsuite.session.telemetryType = sportSensor and "sport" or elrsSensor and "crsf" or nil
-                rfsuite.session.telemetryTypeChanged = currentTelemetrySensor:name() ~= lastTelemetrySensorName
-                lastTelemetrySensorName = currentTelemetrySensor:name()
-                telemetryCheckScheduler = now
-
-                if lastModuleId ~= sensorModule then
-                    lastModuleId = sensorModule
-                    rfsuite.utils.log("Module ID changed, resetting session","info")
-                    rfsuite.session.telemetryTypeChanged = true
-                end
-
+       -- catch switching when to fast for telemetry to drop
+        if now - lastNameCheckAt >= NAME_CHECK_INTERVAL then
+            lastNameCheckAt = now
+            if currentSensor:name() ~= lastSensorName then
+                utils.log("Telemetry sensor changed to " .. tostring(currentSensor:name()), "info")
+                lastSensorName = currentSensor:name()
+                currentSensor = nil  -- force re-detect next time           
             end
+        end     
+
+      return
+    end
+
+    -- only do heavy calls when we *don’t* already have a sensor
+    if not internalModule or not externalModule then
+        internalModule = model.getModule(0)
+        externalModule = model.getModule(1)
+    end
+
+    if internalModule and internalModule:enable() then
+        currentSensor      = system.getSource({ appId = 0xF101 })
+        currentModuleId    = internalModule
+        currentTelemetryType = "sport"
+    elseif externalModule and externalModule:enable() then
+        currentSensor      = system.getSource({ crsfId = 0x14, subIdStart = 0, subIdEnd = 1 })
+        currentModuleId    = externalModule
+        currentTelemetryType = "crsf"
+        if not currentSensor then
+            currentSensor      = system.getSource({ appId = 0xF101 })
+            currentTelemetryType = "sport"
         end
     end
+
+
+    if not currentSensor then
+        return clearSessionAndQueue()
+    end
+
+    rfsuite.session.telemetryState  = true
+    rfsuite.session.telemetrySensor = currentSensor
+    rfsuite.session.telemetryModule = currentModuleId
+    rfsuite.session.telemetryType   = currentTelemetryType
+
+
+    if currentTelemetryType ~= lastTelemetryType then
+        rfsuite.utils.log("Telemetry type changed to " .. tostring(currentTelemetryType), "info")
+        tasks.setTelemetryTypeChanged()
+        lastTelemetryType = currentTelemetryType
+        clearSessionAndQueue()
+    end
+
 end
 
 function tasks.active()
@@ -277,7 +372,34 @@ function tasks.active()
     return false
 end
 
+-- compute positive seconds overdue (<= 0 means not yet due)
+local function overdue_seconds(task, now, grace_s)
+  return (now - task.last_run) - (task.interval + (grace_s or 0))
+end
+
+-- All-second logic + sub-second tolerance; returns (ok_to_run, overdue_seconds)
+local function canRunTask(task, now)
+    local hf = task.interval < SCHED_DT           -- high-frequency task
+    local grace = hf and OVERDUE_TOL or (task.interval * 0.25)  -- light grace for slow tasks
+
+    local od = overdue_seconds(task, now, grace)  -- >0 means overdue by that many seconds
+
+    local priorityTask = task.name == "msp" or task.name == "callback"
+
+    local linkOK = not task.linkrequired or rfsuite.session.telemetryState
+    local connOK = not task.connected    or rfsuite.session.isConnected
+
+    local ok =
+        linkOK
+        and connOK
+        and (priorityTask or od >= 0 or not rfsuite.app.triggers.mspBusy)
+        and (not task.simulatoronly or usingSimulator)
+
+    return ok, od
+end
+
 function tasks.wakeup()
+
     schedulerTick = schedulerTick + 1
     tasks.heartbeat = os.clock()
 
@@ -288,8 +410,8 @@ function tasks.wakeup()
     end
     if not ethosVersionGood then return end
 
-    if tasks.init then
-        tasks.init = false
+    if tasks.begin == true then
+        tasks.begin = false
         tasks._justInitialized = true
         tasks.initialize()
         return
@@ -313,7 +435,7 @@ function tasks.wakeup()
                 end
             end
             local script = "tasks/" .. key .. "/" .. meta.script
-            local module = assert(compiler(script))(config)
+            local module = assert(compiler(script))(config) -- assumes global 'config'
             tasks[key] = module
 
             if meta.interval >= 0 then
@@ -352,57 +474,38 @@ function tasks.wakeup()
     tasks.telemetryCheckScheduler()
 
     local now = os.clock()
-    local cycleFlip = schedulerTick % 2  -- alternate every tick
-
-    local function canRunTask(task)
-        local intervalTicks = task.interval * 20
-        local isHighFrequency = intervalTicks < 20
-        local clockDelta = now - task.last_run
-        local graceFactor = 0.25
-
-        local overdue
-        if isHighFrequency then
-            overdue = clockDelta >= intervalTicks
-        else
-            overdue = clockDelta >= (intervalTicks + intervalTicks * graceFactor)
-        end
-
-        local priorityTask = task.name == "msp" or task.name == "callback"
-
-        local linkOK = not task.linkrequired or rfsuite.session.telemetryState
-        local connOK = not task.connected    or rfsuite.session.isConnected
-
-        return linkOK
-            and connOK
-            and (priorityTask or overdue or not rfsuite.app.triggers.mspBusy)
-            and (not task.simulatoronly or usingSimulator)
-    end
 
     local function runNonSpreadTasks()
         for _, task in ipairs(tasksList) do
-            if not task.spreadschedule and tasks[task.name].wakeup and canRunTask(task) then
-                local elapsed = now - task.last_run
-                if elapsed >= task.interval then
-                    local fn = tasks[task.name].wakeup
-                    if fn then
-                        if profWanted(task.name) then
-                            local t0 = os.clock()
-                            local ok, err = pcall(fn, tasks[task.name])
-                            local t1 = os.clock()
-                            profRecord(task, t1 - t0)
-                            if not ok then
-                                print(("Error in task %q wakeup: %s"):format(task.name, err))
-                                collectgarbage("collect")
-                            end
-                        else
-                            local ok, err = pcall(fn, tasks[task.name])
-                            if not ok then
-                                print(("Error in task %q wakeup: %s"):format(task.name, err))
-                                collectgarbage("collect")
+            if not task.spreadschedule and tasks[task.name].wakeup then
+                local okToRun, od = canRunTask(task, now)
+                if okToRun then
+                    local elapsed = now - task.last_run
+                    if elapsed + OVERDUE_TOL >= task.interval then
+                        if (od or 0) > 0 then
+                            utils.log(string.format("[scheduler] %s overdue by %.3fs", task.name, od), "debug")
+                        end
+                        local fn = tasks[task.name].wakeup
+                        if fn then
+                            if profWanted(task.name) then
+                                local t0 = os.clock()
+                                local ok, err = pcall(fn, tasks[task.name])
+                                local t1 = os.clock()
+                                profRecord(task, t1 - t0)
+                                if not ok then
+                                    print(("Error in task %q wakeup: %s"):format(task.name, err))
+                                    collectgarbage("collect")
+                                end
+                            else
+                                local ok, err = pcall(fn, tasks[task.name])
+                                if not ok then
+                                    print(("Error in task %q wakeup: %s"):format(task.name, err))
+                                    collectgarbage("collect")
+                                end
                             end
                         end
+                        task.last_run = now
                     end
-                    task.last_run = now
                 end
             end
         end
@@ -412,12 +515,21 @@ function tasks.wakeup()
         local normalEligibleTasks, mustRunTasks = {}, {}
 
         for _, task in ipairs(tasksList) do
-            if task.spreadschedule and canRunTask(task) then
-                local elapsed = now - task.last_run
-                if elapsed >= 2 * task.interval then
-                    table.insert(mustRunTasks, task)
-                elseif elapsed >= task.interval then
-                    table.insert(normalEligibleTasks, task)
+            if task.spreadschedule then
+                local okToRun, od = canRunTask(task, now)
+                if okToRun then
+                    local elapsed = now - task.last_run
+                    if elapsed >= 2 * task.interval then
+                        table.insert(mustRunTasks, task)
+                        utils.log(string.format("[scheduler] %s hard overdue by %.3fs",
+                          task.name, elapsed - 2*task.interval), "debug")
+                    elseif elapsed + OVERDUE_TOL >= task.interval then
+                        table.insert(normalEligibleTasks, task)
+                        if elapsed - task.interval > 0 then
+                            utils.log(string.format("[scheduler] %s overdue by %.3fs",
+                              task.name, elapsed - task.interval), "debug")
+                        end
+                    end
                 end
             end
         end
@@ -482,6 +594,7 @@ function tasks.wakeup()
         end
     end
 
+    local cycleFlip = schedulerTick % 2
     if cycleFlip == 0 then
         runNonSpreadTasks()
     else
@@ -498,8 +611,7 @@ function tasks.wakeup()
         end
     end
 
-    -- track average cpu load
-    
+    -- track average cpu load    
   -- Accurate CPU utilization: work_time / wall_time_between_wakeups
   local t_end = os.clock()
   local work_elapsed = t_end - now
@@ -517,6 +629,25 @@ function tasks.wakeup()
   end
 
   local instant_util = work_elapsed / dt   -- 0..∞
+
+  -- ---- Simulator CPU bias ---
+  if usingSimulator then
+    -- Target the radio's baseline utilization in sim.
+    local SIM_TARGET_UTIL = 0.50        -- e.g. 20%
+    local SIM_MAX_UTIL    = 0.80        -- never report above this via bias
+    -- Blend toward the target only when we're below it.
+    if instant_util < SIM_TARGET_UTIL then
+        -- Amount to blend this tick (EMA-ish). Tune 0.25..0.5 for snappier/slower convergence.
+        local BLEND = 0.55
+        instant_util = math.min(
+        SIM_MAX_UTIL,
+        instant_util + (SIM_TARGET_UTIL - instant_util) * BLEND
+        )
+    end
+  end
+  -- ---- end simulator bias ----
+
+
   cpu_avg = CPU_ALPHA * instant_util + (1 - CPU_ALPHA) * cpu_avg
   rfsuite.session.cpuload = math.min(100, math.max(0, cpu_avg * 100))
 
@@ -525,9 +656,9 @@ function tasks.wakeup()
 
     -- track average memory usage
     do
-        local now = os.clock()
-        if (now - last_mem_t) >= MEM_PERIOD then
-            last_mem_t = now
+        local now2 = os.clock()
+        if (now2 - last_mem_t) >= MEM_PERIOD then
+            last_mem_t = now2
             local m = system.getMemoryUsage()
             if m and m.luaRamAvailable then
                 local free_now = m.luaRamAvailable / 1000
@@ -584,7 +715,7 @@ function tasks.dumpProfile(opts)
     utils.log("====== Task Profile ======", "info")
     for _, p in ipairs(snapshot) do
         utils.log(string.format(
-            "%-15s | avg:%8.5fs | last:%8.5fs | max:%8.5fs | total:%8.3fs | runs:%6d | int:%4.2fs",
+            "%-15s | avg:%8.5fs | last:%8.5fs | max:%8.5fs | total:%8.3fs | runs:%6d | int:%4.3fs",
             p.name, p.avg, p.last, p.max, p.total, p.runs, p.interval
         ), "info")
     end
@@ -605,16 +736,71 @@ function tasks.event(widget, category, value, x, y)
     print("Event:", widget, category, value, x, y)
 end
 
+
 function tasks.init()
-    --print("Init:")
+    -- initialize all mutable runtime state here (no heavy work yet)
+    currentTelemetrySensor     = nil
+    tasksPerCycle              = 1
+    taskSchedulerPercentage    = 0.5
+    schedulerTick              = 0
+
+    ethosVersionGood           = nil
+    lastTelemetrySensorName    = nil
+    sportSensor, elrsSensor    = nil, nil
+    lastModuleId               = 0
+    lastSensorName             = nil
+    lastCheckAt                = nil
+
+    -- profiler / CPU / mem tracking baselines
+    CPU_TICK_BUDGET            = 1 / CPU_TICK_HZ
+    CPU_ALPHA                  = 0.2
+    cpu_avg                    = 0
+    last_wakeup_start          = nil
+
+    MEM_ALPHA                  = 0.2
+    mem_avg_kb                 = 0
+    last_mem_t                 = 0
+    MEM_PERIOD                 = 2.0
+
+    -- reset public flags
+    tasks.heartbeat            = nil
+    tasks.wasOn                = false
+    tasks._justInitialized     = false
+
+    -- fresh task container(s)
+    tasksList                  = {}
+    tasks._initState           = "start"
+    tasks._initMetadata        = nil
+    tasks._initKeys            = nil
+    tasks._initIndex           = 1
+
+    -- mark that we should run the discovery/bootstrap on first wakeup tick
+    tasks.begin                = true
+
+    -- Init telemetry sensor
+    tlm = system.getSource({ category = CATEGORY_SYSTEM_EVENT, member = TELEMETRY_ACTIVE })
+
+end
+
+
+--- Sets the telemetry type changed state for all tasks in the `tasksList`.
+-- Iterates through each task in `tasksList` and calls its `setTelemetryTypeChanged` method if it exists.
+-- After updating all tasks, invokes the `rfsuite.utils.session()` function.
+function tasks.setTelemetryTypeChanged()
+    for _, task in ipairs(tasksList) do
+        if tasks[task.name].setTelemetryTypeChanged then
+            tasks[task.name].setTelemetryTypeChanged()
+        end
+    end
+  rfsuite.utils.session()
 end
 
 function tasks.read()
-    --print("Read:")
+    -- print("onRead:")
 end
 
 function tasks.write()
-    --print("Write:")
+    -- print("onWrite:")
 end
 
 return tasks

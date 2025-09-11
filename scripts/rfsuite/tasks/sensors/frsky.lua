@@ -296,6 +296,9 @@ end
 --]]
 -- telemetryPop: short-circuit based on status
 local function telemetryPop()
+
+    if not rfsuite.tasks.msp.sensorTlm then return false end
+
     local frame = rfsuite.tasks.msp.sensorTlm:popFrame()
     if frame == nil then return false end
     if not frame.physId or not frame.primId then return false end
@@ -344,6 +347,7 @@ function frsky.wakeup()
 
         if discoverActive then
             -- ETHOS discovery: unbounded drain for faster sensor discovery
+            rfsuite.utils.log("FRSKY: Discovery active, draining all frames", "info")
             while telemetryPop() do end
         else
             -- Legacy: bounded, low CPU
