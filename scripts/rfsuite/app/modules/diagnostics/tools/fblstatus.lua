@@ -26,7 +26,7 @@ local status = {}
 local summary = {}
 local triggerEraseDataFlash = false
 local enableWakeup = false
-local i18n = rfsuite.i18n.get
+
 local displayType = 0
 local disableType = false
 
@@ -46,13 +46,70 @@ local apidata = {
         labels = {
         },
         fields = {
-            {t = i18n("app.modules.fblstatus.arming_flags"), value = "-", type = displayType, disable = disableType, position = displayPos},
-            {t = i18n("app.modules.fblstatus.dataflash_free_space"), value = "-", type = displayType, disable = disableType, position = displayPos},
-            {t = i18n("app.modules.fblstatus.real_time_load"), value = "-", type = displayType, disable = disableType, position = displayPos},
-            {t = i18n("app.modules.fblstatus.cpu_load"), value = "-", type = displayType, disable = disableType, position = displayPos}
+            {t = "@i18n(app.modules.fblstatus.fbl_date)@", value = "-", type = displayType, disable = disableType, position = displayPos},
+            {t = "@i18n(app.modules.fblstatus.fbl_time)@", value = "-", type = displayType, disable = disableType, position = displayPos},
+            {t = "@i18n(app.modules.fblstatus.arming_flags)@", value = "-", type = displayType, disable = disableType, position = displayPos},
+            {t = "@i18n(app.modules.fblstatus.dataflash_free_space)@", value = "-", type = displayType, disable = disableType, position = displayPos},
+            {t = "@i18n(app.modules.fblstatus.real_time_load)@", value = "-", type = displayType, disable = disableType, position = displayPos},
+            {t = "@i18n(app.modules.fblstatus.cpu_load)@", value = "-", type = displayType, disable = disableType, position = displayPos}
         }
     }                 
 }
+
+
+local function getSimulatorTimeResponse()
+    local t = os.date("*t")  -- get local time
+    local millis = math.floor((os.clock() % 1) * 1000)
+
+    local year = t.year
+    local month = t.month
+    local day = t.day
+    local hour = t.hour
+    local min = t.min
+    local sec = t.sec
+
+    -- encode into byte array (little-endian)
+    local bytes = {
+        year & 0xFF,         -- year LSB
+        (year >> 8) & 0xFF,  -- year MSB
+        month,
+        day,
+        hour,
+        min,
+        sec,
+        millis & 0xFF,       -- millis LSB
+        (millis >> 8) & 0xFF -- millis MSB
+    }
+
+    return bytes
+end
+
+local function getFblTime()
+    local message = {
+        command = 247, -- MSP_STATUS
+        processReply = function(self, buf)
+
+            buf.offset = 1
+            status.fblYear = rfsuite.tasks.msp.mspHelper.readU16(buf)
+            buf.offset = 3
+            status.fblMonth = rfsuite.tasks.msp.mspHelper.readU8(buf)
+            buf.offset = 4
+            status.fblDay = rfsuite.tasks.msp.mspHelper.readU8(buf)
+            buf.offset = 5
+            status.fblHour = rfsuite.tasks.msp.mspHelper.readU8(buf)
+            buf.offset = 6
+            status.fblMinute = rfsuite.tasks.msp.mspHelper.readU8(buf)
+            buf.offset = 7
+            status.fblSecond = rfsuite.tasks.msp.mspHelper.readU8(buf)
+            buf.offset = 8
+            status.fblMillis = rfsuite.tasks.msp.mspHelper.readU16(buf)
+
+        end,
+        simulatorResponse = getSimulatorTimeResponse()
+    }
+
+    rfsuite.tasks.msp.mspQueue:add(message)
+end
 
 local function getStatus()
     local message = {
@@ -107,6 +164,8 @@ local function eraseDataflash()
             rfsuite.app.formFields[2]:value("")
             rfsuite.app.formFields[3]:value("")
             rfsuite.app.formFields[4]:value("")
+            rfsuite.app.formFields[5]:value("")
+            rfsuite.app.formFields[6]:value("")
         end,
         simulatorResponse = {}
     }
@@ -117,6 +176,7 @@ local function postLoad(self)
 
     getStatus()
     getDataflashSummary()
+    getFblTime()
     rfsuite.app.triggers.isReady = true
     enableWakeup = true
 
@@ -128,9 +188,9 @@ local function postRead(self)
 end
 
 local function getFreeDataflashSpace()
-    if not summary.supported then return i18n("app.modules.fblstatus.unsupported") end
+    if not summary.supported then return "@i18n(app.modules.fblstatus.unsupported)@" end
     local freeSpace = summary.totalSize - summary.usedSize
-    return string.format("%.1f " .. i18n("app.modules.fblstatus.megabyte"), freeSpace / (1024 * 1024))
+    return string.format("%.1f " .. "@i18n(app.modules.fblstatus.megabyte)@", freeSpace / (1024 * 1024))
 end
 
 local function wakeup()
@@ -142,7 +202,7 @@ local function wakeup()
         rfsuite.app.audio.playEraseFlash = true
         triggerEraseDataFlash = false
 
-        rfsuite.app.ui.progressDisplay(i18n("app.modules.fblstatus.erasing"), i18n("app.modules.fblstatus.erasing_dataflash"))
+        rfsuite.app.ui.progressDisplay("@i18n(app.modules.fblstatus.erasing)@", "@i18n(app.modules.fblstatus.erasing_dataflash)@")
         rfsuite.app.Page.eraseDataflash()
         rfsuite.app.triggers.isReady = true
     end
@@ -156,25 +216,36 @@ local function wakeup()
 
                 getStatus()
                 getDataflashSummary()
+                getFblTime()
+
+                if status.fblYear ~= nil and status.fblMonth ~= nil and status.fblDay ~= nil then
+                    local value = string.format("%04d-%02d-%02d", status.fblYear, status.fblMonth, status.fblDay)
+                    rfsuite.app.formFields[1]:value(value)
+                end
+
+                if status.fblHour ~= nil and status.fblMinute ~= nil and status.fblSecond ~= nil then
+                    local value = string.format("%02d:%02d:%02d", status.fblHour, status.fblMinute, status.fblSecond)
+                    rfsuite.app.formFields[2]:value(value)
+                end
 
                 if status.armingDisableFlags ~= nil then
                     local value = rfsuite.utils.armingDisableFlagsToString(status.armingDisableFlags)
-                    rfsuite.app.formFields[1]:value(value)
+                    rfsuite.app.formFields[3]:value(value)
                 end
 
                 if summary.supported == true then
                     local value = getFreeDataflashSpace()
-                    rfsuite.app.formFields[2]:value(value)
+                    rfsuite.app.formFields[4]:value(value)
                 end
 
                 if status.realTimeLoad ~= nil then
                     local value = math.floor(status.realTimeLoad / 10)
-                    rfsuite.app.formFields[3]:value(tostring(value) .. "%")
+                    rfsuite.app.formFields[5]:value(tostring(value) .. "%")
                     if value >= 60 then rfsuite.app.formFields[4]:color(RED) end
                 end
                 if status.cpuLoad ~= nil then
                     local value = status.cpuLoad / 10
-                    rfsuite.app.formFields[4]:value(tostring(value) .. "%")
+                    rfsuite.app.formFields[6]:value(tostring(value) .. "%")
                     if value >= 60 then rfsuite.app.formFields[4]:color(RED) end
                 end
 
@@ -190,7 +261,7 @@ end
 local function onToolMenu(self)
 
     local buttons = {{
-        label = i18n("app.btn_ok_long"),
+        label = "@i18n(app.btn_ok_long)@",
         action = function()
 
             -- we cant launch the loader here to se rely on the modules
@@ -199,7 +270,7 @@ local function onToolMenu(self)
             return true
         end
     }, {
-        label = i18n("app.btn_cancel"),
+        label = "@i18n(app.btn_cancel)@",
         action = function()
             return true
         end
@@ -207,8 +278,8 @@ local function onToolMenu(self)
     local message
     local title
 
-    title = i18n("app.modules.fblstatus.erase")
-    message = i18n("app.modules.fblstatus.erase_prompt")
+    title = "@i18n(app.modules.fblstatus.erase)@"
+    message = "@i18n(app.modules.fblstatus.erase_prompt)@"
 
     form.openDialog({
         width = nil,
@@ -229,7 +300,7 @@ local function event(widget, category, value, x, y)
     if category == EVT_CLOSE and value == 0 or value == 35 then
         rfsuite.app.ui.openPage(
             pageIdx,
-            i18n("app.modules.diagnostics.name"),
+            "@i18n(app.modules.diagnostics.name)@",
             "diagnostics/diagnostics.lua"
         )
         return true
@@ -241,7 +312,7 @@ local function onNavMenu()
     rfsuite.app.ui.progressDisplay(nil,nil,true)
     rfsuite.app.ui.openPage(
         pageIdx,
-        i18n("app.modules.diagnostics.name"),
+        "@i18n(app.modules.diagnostics.name)@",
         "diagnostics/diagnostics.lua"
     )
 end

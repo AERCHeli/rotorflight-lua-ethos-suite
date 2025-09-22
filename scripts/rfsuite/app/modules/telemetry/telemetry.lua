@@ -1,6 +1,6 @@
 -- telemetry.lua (refactored to use sid.lua)
 
-local i18n = rfsuite.i18n.get
+
 local enableWakeup = false
 
 local mspData = nil
@@ -15,7 +15,8 @@ local PREV_STATE = {}
 -- Load the shared sensor definitions (sid.lua)
 -- Expects sid.lua to 'return sensorList' (table keyed by numeric ID)
 ----------------------------------------------------------------------
-local sensorList = rfsuite.tasks.sensors.getSid()
+--local sensorList = rfsuite.tasks.sensors.getSid()
+local sensorList= assert(rfsuite.compiler.loadfile("tasks/sensors/sid.lua"))(config)
 
 ----------------------------------------------------------------------
 -- Build TELEMETRY_SENSORS from sid.lua
@@ -41,14 +42,32 @@ end
 -- Title tries i18n("telemetry.group_"..group) else uses the group name.
 -- IDs are sorted numerically for a stable UI order.
 ----------------------------------------------------------------------
+-- Literal tag map for group titles (must be literal so the post-processor can replace them)
+local GROUP_TITLE_TAG = {
+  battery   = "@i18n(telemetry.group_battery)@",
+  voltage   = "@i18n(telemetry.group_voltage)@",
+  current   = "@i18n(telemetry.group_current)@",
+  temps     = "@i18n(telemetry.group_temps)@",
+  esc1      = "@i18n(telemetry.group_esc1)@",
+  esc2      = "@i18n(telemetry.group_esc2)@",
+  rpm       = "@i18n(telemetry.group_rpm)@",
+  barometer = "@i18n(telemetry.group_barometer)@",
+  gyro      = "@i18n(telemetry.group_gyro)@",
+  gps       = "@i18n(telemetry.group_gps)@",
+  status    = "@i18n(telemetry.group_status)@",
+  profiles  = "@i18n(telemetry.group_profiles)@",
+  control   = "@i18n(telemetry.group_control)@",
+  system    = "@i18n(telemetry.group_system)@",
+  debug     = "@i18n(telemetry.group_debug)@",
+}
+
 local function buildGroups(list)
   local groups = {}
   for id, s in pairs(list) do
     local grp = s.group or "system"
     if not groups[grp] then
-      -- Try internationalized title first; fallback to raw group name
-      local key = "telemetry.group_" .. grp
-      local title = i18n(key) or grp
+      -- Use a literal tag if we have it; otherwise show the raw group key
+      local title = GROUP_TITLE_TAG[grp] or grp
       groups[grp] = { title = title, ids = {} }
     end
     table.insert(groups[grp].ids, id)
@@ -121,7 +140,7 @@ end
 
 local function alertIfTooManySensors()
   local buttons = {{
-    label = i18n("app.modules.profile_select.ok"),
+    label = "@i18n(app.modules.profile_select.ok)@",
     action = function()
       return true
     end,
@@ -129,8 +148,8 @@ local function alertIfTooManySensors()
 
   form.openDialog({
     width = nil,
-    title = i18n("app.modules.telemetry.name"),
-    message = i18n("app.modules.telemetry.no_more_than_40"),
+    title = "@i18n(app.modules.telemetry.name)@",
+    message = "@i18n(app.modules.telemetry.no_more_than_40)@",
     buttons = buttons,
     wakeup = function() end,
     paint = function() end,
@@ -147,7 +166,7 @@ local function openPage(pidx, title, script)
   rfsuite.app.lastScript = script
 
   -- header
-  rfsuite.app.ui.fieldHeader(i18n("app.modules.telemetry.name"))
+  rfsuite.app.ui.fieldHeader("@i18n(app.modules.telemetry.name)@")
 
   rfsuite.app.formLineCnt = 0
   rfsuite.app.formFields = {}
@@ -156,7 +175,7 @@ local function openPage(pidx, title, script)
   if rfsuite.utils.apiVersionCompare("<", "12.08") then
     rfsuite.app.triggers.closeProgressLoader = true
 
-    rfsuite.app.formLines[#rfsuite.app.formLines + 1] = form.addLine(i18n("app.modules.telemetry.invalid_version"))
+    rfsuite.app.formLines[#rfsuite.app.formLines + 1] = form.addLine("@i18n(app.modules.telemetry.invalid_version)@")
 
     rfsuite.app.formNavigationFields["save"]:enable(false)
     rfsuite.app.formNavigationFields["reload"]:enable(false)
@@ -220,6 +239,7 @@ local function openPage(pidx, title, script)
               config[sensor.id] = val
             end
           )
+          rfsuite.app.formFields[formFieldCount]:enable(false)
         end
       end
     end
@@ -269,30 +289,36 @@ local function wakeup()
     API.setCompleteHandler(function(self, buf)
       local hasData = API.readValue("telem_sensor_slot_40")
       if hasData then
-        rfsuite.app.Page.mspData = API.data()
-        rfsuite.app.Page.configLoaded = true
+        if rfsuite.app.Page then
+
+          if rfsuite.app.formFields then
+            for i,v in pairs(rfsuite.app.formFields) do
+              if v then
+                v:enable(true)
+              end
+            end
+          end
+          
+          local data = API.data()
+
+          for _, value in pairs(data.parsed) do
+            -- by default field is 'false' so only set true values
+            if value ~= 0 then
+              rfsuite.app.Page.config[value] = true
+            end
+          end
+        end
+        rfsuite.app.triggers.closeProgressLoader = true
       end
     end)
-    API.setUUID("a23e4567-e89b-12d3-a456-426614174001")
+    API.setUUID("a23e4567-e89b-12d3-a456-426614174001" )
     API.read()
-  end
-
-  -- if we have data, populate config if empty (stop as soon as config has something in it)
-  if rfsuite.app.Page and rfsuite.app.Page.configLoaded == true and rfsuite.app.Page.configApplied == false then
-    local parsed = rfsuite.app.Page.mspData.parsed
-    for _, value in pairs(parsed) do
-      -- by default field is 'false' so only set true values
-      if value ~= 0 then
-        config[value] = true
-      end
-    end
-    rfsuite.app.Page.configApplied = true
-    rfsuite.app.triggers.closeProgressLoader = true
+    rfsuite.app.Page.configLoaded = true
   end
 
   -- save?
 if triggerSave == true then
-  rfsuite.app.ui.progressDisplaySave(i18n("app.modules.profile_select.save_settings"))
+  rfsuite.app.ui.progressDisplaySave("@i18n(app.modules.profile_select.save_settings)@")
 
   local selectedSensors = {}
 
@@ -376,13 +402,13 @@ end
 
 local function onSaveMenu()
   local buttons = {{
-    label = i18n("app.btn_ok_long"),
+    label = "@i18n(app.btn_ok_long)@",
     action = function()
       triggerSave = true
       return true
     end,
   }, {
-    label = i18n("app.modules.profile_select.cancel"),
+    label = "@i18n(app.modules.profile_select.cancel)@",
     action = function()
       triggerSave = false
       return true
@@ -391,8 +417,8 @@ local function onSaveMenu()
 
   form.openDialog({
     width = nil,
-    title = i18n("app.modules.profile_select.save_settings"),
-    message = i18n("app.modules.profile_select.save_prompt"),
+    title = "@i18n(app.modules.profile_select.save_settings)@",
+    message = "@i18n(app.modules.profile_select.save_prompt)@",
     buttons = buttons,
     wakeup = function() end,
     paint = function() end,
@@ -404,14 +430,14 @@ end
 
 local function onToolMenu(self)
   local buttons = {{
-    label = rfsuite.i18n.get("app.btn_ok"),
+    label = "@i18n(app.btn_ok)@",
     action = function()
       -- we push this to the background task to do its job
       setDefaultSensors = true
       return true
     end,
   }, {
-    label = rfsuite.i18n.get("app.btn_cancel"),
+    label = "@i18n(app.btn_cancel)@",
     action = function()
       return true
     end,
@@ -419,8 +445,8 @@ local function onToolMenu(self)
 
   form.openDialog({
     width = nil,
-    title = rfsuite.i18n.get("app.modules.telemetry.name"),
-    message = rfsuite.i18n.get("app.modules.telemetry.msg_set_defaults"),
+    title = "@i18n(app.modules.telemetry.name)@",
+    message = "@i18n(app.modules.telemetry.msg_set_defaults)@",
     buttons = buttons,
     wakeup = function() end,
     paint = function() end,
@@ -458,6 +484,7 @@ return {
   reboot = false,
   wakeup = wakeup,
   API = {},
+  config = config,
   configLoaded = configLoaded,
   configApplied = configApplied,
   navButtons = {
